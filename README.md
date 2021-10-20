@@ -10,6 +10,10 @@
   [![docs](https://docs.rs/sea-orm/badge.svg)](https://docs.rs/sea-orm)
   [![build status](https://github.com/SeaQL/sea-orm/actions/workflows/rust.yml/badge.svg)](https://github.com/SeaQL/sea-orm/actions/workflows/rust.yml)
 
+  [![test-postgres](https://github.com/SeaQL/sea-orm/actions/workflows/test-postgres.yml/badge.svg?branch=ci-changes)](https://github.com/SeaQL/sea-orm/actions/workflows/test-postgres.yml)
+  [![test-mysql](https://github.com/SeaQL/sea-orm/actions/workflows/test-mysql.yml/badge.svg?branch=ci-changes)](https://github.com/SeaQL/sea-orm/actions/workflows/test-mysql.yml)
+  [![test-sqlite](https://github.com/SeaQL/sea-orm/actions/workflows/test-sqlite.yml/badge.svg?branch=ci-changes)](https://github.com/SeaQL/sea-orm/actions/workflows/test-sqlite.yml)
+
   <sub>Built with 🔥 by 🌊🦀🐚</sub>
 
 </div>

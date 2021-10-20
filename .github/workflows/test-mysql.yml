@@ -1,0 +1,151 @@
+name: test-mysql
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+      - 0.2.x
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  compile-mysql:
+    name: Compile MySQL
+    runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        runtime: [async-std, actix, tokio]
+        tls: [native-tls, rustls]
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            Cargo.lock
+            target
+          key: ${{ github.sha }}-${{ github.run_id }}-${{ runner.os }}-mysql-${{ matrix.runtime }}-${{ matrix.tls }}
+
+      - uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: >
+            --test '*'
+            --features default,sqlx-mysql,runtime-${{ matrix.runtime }}-${{ matrix.tls }}
+            --no-run
+
+  mysql:
+    name: MySQL
+    runs-on: ubuntu-20.04
+    needs: compile-mysql
+    env:
+      DATABASE_URL: "mysql://root:@localhost"
+    strategy:
+      matrix:
+        version: [8.0, 5.7]
+        runtime: [async-std, actix, tokio]
+        tls: [native-tls]
+    services:
+      mysql:
+        image: mysql:${{ matrix.version }}
+        env:
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_DB: mysql
+          MYSQL_USER: sea
+          MYSQL_PASSWORD: sea
+          MYSQL_ALLOW_EMPTY_PASSWORD: yes
+          MYSQL_ROOT_PASSWORD:
+        ports:
+          - "3306:3306"
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            Cargo.lock
+            target
+          key: ${{ github.sha }}-${{ github.run_id }}-${{ runner.os }}-mysql-${{ matrix.runtime }}-${{ matrix.tls }}
+
+      - uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: >
+            --test '*'
+            --features default,sqlx-mysql,runtime-${{ matrix.runtime }}-${{ matrix.tls }}
+
+  mariadb:
+    name: MariaDB
+    runs-on: ubuntu-20.04
+    needs: compile-mysql
+    env:
+      DATABASE_URL: "mysql://root:@localhost"
+    strategy:
+      matrix:
+        version: [10.6]
+        runtime: [async-std, actix, tokio]
+        tls: [native-tls]
+    services:
+      mysql:
+        image: mariadb:${{ matrix.version }}
+        env:
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_DB: mysql
+          MYSQL_USER: sea
+          MYSQL_PASSWORD: sea
+          MYSQL_ALLOW_EMPTY_PASSWORD: yes
+          MYSQL_ROOT_PASSWORD:
+        ports:
+          - "3306:3306"
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            Cargo.lock
+            target
+          key: ${{ github.sha }}-${{ github.run_id }}-${{ runner.os }}-mysql-${{ matrix.runtime }}-${{ matrix.tls }}
+
+      - uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: >
+            --test '*'
+            --features default,sqlx-mysql,runtime-${{ matrix.runtime }}-${{ matrix.tls }}
