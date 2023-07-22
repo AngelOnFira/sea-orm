@@ -460,18 +460,23 @@ impl EntityWriter {
         entity
             .columns
             .iter()
-            .fold((TokenStream::new(), Vec::new()), |(mut ts, mut enums), col| {
-                if let sea_query::ColumnType::Enum { name, .. } = &col.col_type {
-                    if !enums.contains(&name) {
-                        enums.push(name);
-                        let enum_name = format_ident!("{}", name.to_string().to_upper_camel_case());
-                        ts.extend([quote! {
-                            use super::sea_orm_active_enums::#enum_name;
-                        }]);
+            .fold(
+                (TokenStream::new(), Vec::new()),
+                |(mut ts, mut enums), col| {
+                    if let sea_query::ColumnType::Enum { name, .. } = &col.col_type {
+                        if !enums.contains(&name) {
+                            enums.push(name);
+                            let enum_name =
+                                format_ident!("{}", name.to_string().to_upper_camel_case());
+                            ts.extend([quote! {
+                                use super::sea_orm_active_enums::#enum_name;
+                            }]);
+                        }
                     }
-                }
-                (ts, enums)
-            }).0
+                    (ts, enums)
+                },
+            )
+            .0
     }
 
     pub fn gen_model_struct(
@@ -817,7 +822,7 @@ mod tests {
     };
     use pretty_assertions::assert_eq;
     use proc_macro2::TokenStream;
-    use sea_query::{ColumnType, ForeignKeyAction, RcOrArc};
+    use sea_query::{ColumnType, ForeignKeyAction, RcOrArc, SeaRc, Alias};
     use std::io::{self, BufRead, BufReader, Read};
 
     fn setup() -> Vec<Entity> {
@@ -2157,6 +2162,128 @@ mod tests {
 
         const ENTITY_FILES_EXPANDED: [&str; 1] =
             [include_str!("../../tests/postgres/binary_json_expanded.rs")];
+
+        assert_eq!(entities.len(), ENTITY_FILES.len());
+
+        for (i, entity) in entities.iter().enumerate() {
+            assert_eq!(
+                parse_from_file(ENTITY_FILES[i].as_bytes())?.to_string(),
+                EntityWriter::gen_compact_code_blocks(
+                    entity,
+                    &crate::WithSerde::None,
+                    &crate::DateTimeCrate::Chrono,
+                    &None,
+                    false,
+                    false,
+                    &TokenStream::new(),
+                    &TokenStream::new(),
+                    false,
+                )
+                .into_iter()
+                .skip(1)
+                .fold(TokenStream::new(), |mut acc, tok| {
+                    acc.extend(tok);
+                    acc
+                })
+                .to_string()
+            );
+            assert_eq!(
+                parse_from_file(ENTITY_FILES[i].as_bytes())?.to_string(),
+                EntityWriter::gen_compact_code_blocks(
+                    entity,
+                    &crate::WithSerde::None,
+                    &crate::DateTimeCrate::Chrono,
+                    &Some("public".to_owned()),
+                    false,
+                    false,
+                    &TokenStream::new(),
+                    &TokenStream::new(),
+                    false,
+                )
+                .into_iter()
+                .skip(1)
+                .fold(TokenStream::new(), |mut acc, tok| {
+                    acc.extend(tok);
+                    acc
+                })
+                .to_string()
+            );
+            assert_eq!(
+                parse_from_file(ENTITY_FILES_EXPANDED[i].as_bytes())?.to_string(),
+                EntityWriter::gen_expanded_code_blocks(
+                    entity,
+                    &crate::WithSerde::None,
+                    &crate::DateTimeCrate::Chrono,
+                    &Some("schema_name".to_owned()),
+                    false,
+                    false,
+                    &TokenStream::new(),
+                    &TokenStream::new(),
+                    false,
+                )
+                .into_iter()
+                .skip(1)
+                .fold(TokenStream::new(), |mut acc, tok| {
+                    acc.extend(tok);
+                    acc
+                })
+                .to_string()
+            );
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_no_multiple_use() -> io::Result<()> {
+        let entities = vec![
+            // This tests that generating multiple enumeration fields from the
+            // same enumeration type does not result in multiple `use`
+            // statements
+            //
+            // https://github.com/SeaQL/sea-orm/issues/1699
+            Entity {
+                table_name: "table".to_owned(),
+                columns: vec![
+                    Column {
+                        name: "id".to_owned(),
+                        col_type: ColumnType::Integer,
+                        auto_increment: true,
+                        not_null: true,
+                        unique: false,
+                    },
+                    Column {
+                        name: "payload".to_owned(),
+                        col_type: ColumnType::Enum {
+                            name: SeaRc::new(Alias::new("MyEnum")),
+                            variants: vec![SeaRc::new(Alias::new("A")), SeaRc::new(Alias::new("B"))],
+                        },
+                        auto_increment: false,
+                        not_null: true,
+                        unique: false,
+                    },
+                    Column {
+                        name: "payload_binary".to_owned(),
+                        col_type: ColumnType::Enum {
+                            name: SeaRc::new(Alias::new("MyEnum")),
+                            variants: vec![SeaRc::new(Alias::new("A")), SeaRc::new(Alias::new("B"))],
+                        },
+                        auto_increment: false,
+                        not_null: true,
+                        unique: false,
+                    },
+                ],
+                relations: vec![],
+                conjunct_relations: vec![],
+                primary_keys: vec![PrimaryKey {
+                    name: "id".to_owned(),
+                }],
+            },
+        ];
+        const ENTITY_FILES: [&str; 1] = [include_str!("../../tests/postgres/use_from_enum.rs")];
+
+        const ENTITY_FILES_EXPANDED: [&str; 1] =
+            [include_str!("../../tests/postgres/use_from_enum_expanded.rs")];
 
         assert_eq!(entities.len(), ENTITY_FILES.len());
 
