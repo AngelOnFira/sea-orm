@@ -1,13 +1,14 @@
-//! Passing a raw `i32` to `find_by_id` must not compile when the PK is a
-//! newtype with no `From<i32>` impl. This is the core safety contract.
+//! Passing a raw `i32` to `find_by_id` must not compile when the PK is
+//! `Id<user::Entity, i32>`. `Id<E, T>` deliberately does not impl
+//! `From<T>`, so `i32: !Into<Id<user::Entity, i32>>`. This is the core
+//! safety contract of the phantom-typed wrapper.
 
 use sea_orm::entity::prelude::*;
 
-#[derive(Clone, Debug, PartialEq, Eq, DeriveValueType)]
-pub struct UserId(pub i32);
-
 mod user {
-    use super::*;
+    use sea_orm::entity::prelude::*;
+
+    pub type UserId = sea_orm::Id<Entity, i32>;
 
     #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
     #[sea_orm(table_name = "user")]
@@ -24,5 +25,6 @@ mod user {
 }
 
 fn main() {
+    // Raw `i32` not convertible into `Id<user::Entity, i32>`.
     let _ = user::Entity::find_by_id(1i32);
 }

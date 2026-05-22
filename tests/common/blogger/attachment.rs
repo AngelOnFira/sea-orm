@@ -1,7 +1,6 @@
 use sea_orm::entity::prelude::*;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, DeriveValueType)]
-pub struct AttachmentId(pub i32);
+pub type AttachmentId = sea_orm::Id<Entity, i32>;
 
 #[sea_orm::model]
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]

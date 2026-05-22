@@ -12,6 +12,15 @@ use std::rc::Rc;
 /// `write_entities` call when `--with-pk-newtypes` is enabled.
 pub type PkNewtypeIndex = HashMap<(String, String), Ident>;
 
+/// A single FK back-reference: this column points at `table.column`.
+/// A column may have more than one such ref if the same SQL column is
+/// constrained against multiple parents (legal SQL — see issue #N).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ColumnRef {
+    pub table: String,
+    pub column: String,
+}
+
 #[derive(Debug, Clone)]
 pub struct Column {
     pub(crate) name: String,
@@ -20,13 +29,12 @@ pub struct Column {
     pub(crate) not_null: bool,
     pub(crate) unique: bool,
     pub(crate) unique_key: Option<String>,
-    /// Set when this column participates in a `BelongsTo` relation — the
-    /// referenced table name. Populated by `EntityTransformer` from the
-    /// schema's foreign key constraints. `None` for non-FK columns.
-    pub(crate) ref_table: Option<String>,
-    /// Set when this column participates in a `BelongsTo` relation — the
-    /// referenced column name in the parent table.
-    pub(crate) ref_column: Option<String>,
+    /// FK back-references — `(parent_table, parent_column)` pairs for every
+    /// `BelongsTo` relation that includes this column. Empty for non-FK
+    /// columns. Populated by `EntityTransformer` from the schema's foreign
+    /// key constraints. Multiple entries are legal (a column can be
+    /// constrained against multiple parents).
+    pub(crate) refs: Vec<ColumnRef>,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -37,10 +45,16 @@ pub struct ColumnOption {
     /// `pk_newtype_index` is populated so `get_rs_type` can look up
     /// "is this column a PK in its own table?".
     pub(crate) current_table: Option<String>,
-    /// `(table_name, column_name) -> newtype Ident`. When present,
-    /// PK columns emit the local newtype name and FK columns emit
-    /// `super::ref_table::RefTableId`.
+    /// `(table_name, column_name) -> alias Ident`. When present,
+    /// FK columns emit `super::ref_table::RefAlias` and own-PK columns
+    /// emit the local alias.
     pub(crate) pk_newtype_index: Option<Rc<PkNewtypeIndex>>,
+    /// `(own_table, fk_column) -> RoleWrapperIdent` for self-ref junction
+    /// tables where multiple columns FK-reference the same parent.
+    /// Takes precedence over `pk_newtype_index` when resolving column
+    /// types, so the role-wrapped column emits its local wrapper struct
+    /// name rather than the parent's alias.
+    pub(crate) role_wrapper_index: Option<Rc<PkNewtypeIndex>>,
 }
 
 impl Column {
@@ -120,32 +134,55 @@ impl Column {
                 _ => unimplemented!(),
             }
         }
-        // PK-newtype mode: if the column is a PK in its own table, or
-        // an FK pointing at another table's PK, emit the per-entity
-        // newtype identifier instead of the raw scalar type.
+        // PK-newtype mode: resolve the field type in this order:
+        //   1. Role-wrapper index hit on (current_table, self.name) — the
+        //      column is one of several columns in this table that FK to
+        //      the same parent; emit the local role wrapper struct name.
+        //   2. The column is an FK (has refs); emit the parent's alias
+        //      (`super::ref::Alias` cross-module, or local if self-ref).
+        //   3. The column is the entity's own PK; emit the local alias.
+        //   4. Fall through to raw scalar.
+        //
+        // For columns with multiple FK back-references (legal SQL: same
+        // column constrained against >1 parent), step 2 picks `refs[0]`.
         let inner: TokenStream = if let (Some(index), Some(current_table)) = (
             opt.pk_newtype_index.as_deref(),
             opt.current_table.as_deref(),
         ) {
-            if let Some(ident) = index.get(&(current_table.to_owned(), self.name.clone())) {
-                // This column is a PK in its own table.
-                quote! { #ident }
-            } else if let (Some(ref_table), Some(ref_column)) =
-                (self.ref_table.as_deref(), self.ref_column.as_deref())
+            // Step 1: role wrapper
+            if let Some(role_index) = opt.role_wrapper_index.as_deref()
+                && let Some(ident) =
+                    role_index.get(&(current_table.to_owned(), self.name.clone()))
             {
-                if let Some(ident) = index.get(&(ref_table.to_owned(), ref_column.to_owned())) {
-                    if ref_table == current_table {
+                quote! { #ident }
+            }
+            // Step 2: FK to parent's alias
+            else if let Some(first_ref) = self.refs.first() {
+                if let Some(ident) =
+                    index.get(&(first_ref.table.clone(), first_ref.column.clone()))
+                {
+                    if first_ref.table == current_table {
                         // Self-referencing FK — emit local name (no super::).
                         quote! { #ident }
                     } else {
-                        let module =
-                            format_ident!("{}", escape_rust_keyword(ref_table.to_snake_case()));
+                        let module = format_ident!(
+                            "{}",
+                            escape_rust_keyword(first_ref.table.to_snake_case())
+                        );
                         quote! { super::#module::#ident }
                     }
                 } else {
                     write_rs_type(&self.col_type, opt).parse().unwrap()
                 }
-            } else {
+            }
+            // Step 3: own-PK alias
+            else if let Some(ident) =
+                index.get(&(current_table.to_owned(), self.name.clone()))
+            {
+                quote! { #ident }
+            }
+            // Step 4: raw scalar
+            else {
                 write_rs_type(&self.col_type, opt).parse().unwrap()
             }
         } else {
@@ -357,8 +394,7 @@ impl From<&ColumnDef> for Column {
             not_null,
             unique,
             unique_key: None,
-            ref_table: None,
-            ref_column: None,
+            refs: Vec::new(),
         }
     }
 }
@@ -376,6 +412,7 @@ mod tests {
             big_integer_type: Default::default(),
             current_table: None,
             pk_newtype_index: None,
+            role_wrapper_index: None,
         }
     }
 
@@ -385,6 +422,7 @@ mod tests {
             big_integer_type: Default::default(),
             current_table: None,
             pk_newtype_index: None,
+            role_wrapper_index: None,
         }
     }
 
@@ -398,8 +436,7 @@ mod tests {
                     not_null: false,
                     unique: false,
                     unique_key: None,
-                    ref_table: None,
-                    ref_column: None,
+                    refs: Vec::new(),
                 }
             };
         }

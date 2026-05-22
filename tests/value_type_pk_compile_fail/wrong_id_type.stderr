@@ -1,13 +1,17 @@
-error[E0308]: mismatched types
-  --> tests/value_type_pk_compile_fail/wrong_id_type.rs:31:38
+error[E0277]: the trait bound `sea_orm::Id<user::Entity, i32>: From<sea_orm::Id<post::Entity, i32>>` is not satisfied
+  --> tests/value_type_pk_compile_fail/wrong_id_type.rs:47:38
    |
-31 |     let _ = user::Entity::find_by_id(PostId(1));
-   |             ------------------------ ^^^^^^^^^ expected `UserId`, found `PostId`
+47 |     let _ = user::Entity::find_by_id(post::PostId::new(1));
+   |             ------------------------ ^^^^^^^^^^^^^^^^^^^^ the trait `From<sea_orm::Id<post::Entity, i32>>` is not implemented for `sea_orm::Id<user::Entity, i32>`
    |             |
-   |             arguments to this function are incorrect
+   |             required by a bound introduced by this call
    |
-note: associated function defined here
+   = note: required for `sea_orm::Id<post::Entity, i32>` to implement `Into<sea_orm::Id<user::Entity, i32>>`
+note: required by a bound in `find_by_id`
   --> src/entity/base_entity.rs
    |
-   |     fn find_by_id(values: <Self::PrimaryKey as PrimaryKeyTrait>::ValueType) -> Select<Self> {
-   |        ^^^^^^^^^^
+   |     fn find_by_id<T>(values: T) -> Select<Self>
+   |        ---------- required by a bound in this associated function
+   |     where
+   |         T: Into<<Self::PrimaryKey as PrimaryKeyTrait>::ValueType>,
+   |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `EntityTrait::find_by_id`

@@ -312,10 +312,13 @@ pub trait EntityTrait: EntityName {
     /// # Ok(())
     /// # }
     /// ```
-    fn find_by_id(values: <Self::PrimaryKey as PrimaryKeyTrait>::ValueType) -> Select<Self> {
+    fn find_by_id<T>(values: T) -> Select<Self>
+    where
+        T: Into<<Self::PrimaryKey as PrimaryKeyTrait>::ValueType>,
+    {
         let mut select = Self::find();
         let mut keys = Self::PrimaryKey::iter();
-        for v in values.into_value_tuple() {
+        for v in values.into().into_value_tuple() {
             if let Some(key) = keys.next() {
                 let col = key.into_column();
                 select = select.filter(col.eq(v));

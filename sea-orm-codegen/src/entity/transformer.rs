@@ -125,18 +125,24 @@ impl EntityTransformer {
                     }),
             );
             // Populate per-column FK back-references from the relations.
-            // After this, any FK column carries `ref_table` (parent table
-            // name) and `ref_column` (parent's column name) so downstream
-            // codegen can resolve the referenced PK type without re-walking
-            // the relations.
+            // After this, any FK column carries `refs: Vec<ColumnRef>` of
+            // `(parent_table, parent_column)` so downstream codegen can
+            // resolve the referenced PK type(s) without re-walking the
+            // relations. A column may appear in multiple BelongsTo
+            // relations (legal SQL when the same column is constrained
+            // against multiple parents), in which case all back-refs are
+            // recorded; under `--with-pk-newtypes` the codegen picks the
+            // first one and documents the ambiguity.
             for rel in relations.iter() {
                 if !matches!(rel.rel_type, RelationType::BelongsTo) {
                     continue;
                 }
                 for (fk_col, parent_col) in rel.columns.iter().zip(rel.ref_columns.iter()) {
                     if let Some(col) = columns.iter_mut().find(|c| &c.name == fk_col) {
-                        col.ref_table = Some(rel.ref_table.clone());
-                        col.ref_column = Some(parent_col.clone());
+                        col.refs.push(crate::ColumnRef {
+                            table: rel.ref_table.clone(),
+                            column: parent_col.clone(),
+                        });
                     }
                 }
             }
@@ -474,17 +480,95 @@ mod tests {
             .iter()
             .find(|c| c.name == "parent_id")
             .expect("missing parent_id column");
-        assert_eq!(parent_id_col.ref_table.as_deref(), Some("parent"));
-        assert_eq!(parent_id_col.ref_column.as_deref(), Some("id"));
+        assert_eq!(parent_id_col.refs.len(), 1);
+        assert_eq!(parent_id_col.refs[0].table, "parent");
+        assert_eq!(parent_id_col.refs[0].column, "id");
 
-        // The PK column itself is not an FK — fields must stay None.
+        // The PK column itself is not an FK — refs must stay empty.
         let id_col = child
             .columns
             .iter()
             .find(|c| c.name == "id")
             .expect("missing id column");
-        assert_eq!(id_col.ref_table, None);
-        assert_eq!(id_col.ref_column, None);
+        assert!(id_col.refs.is_empty());
+
+        Ok(())
+    }
+
+    #[test]
+    fn multi_fk_same_column_records_both_backrefs() -> Result<(), Box<dyn Error>> {
+        // Two FKs on the same `user_id` column — pointing at two different
+        // parents. Per-column back-references are currently a scalar
+        // `Option<String>`, so only the *last* one survives.
+        let users = Table::create()
+            .table("users")
+            .col(
+                ColumnDef::new("id")
+                    .integer()
+                    .not_null()
+                    .auto_increment()
+                    .primary_key(),
+            )
+            .to_owned();
+        let legacy_users = Table::create()
+            .table("legacy_users")
+            .col(
+                ColumnDef::new("id")
+                    .integer()
+                    .not_null()
+                    .auto_increment()
+                    .primary_key(),
+            )
+            .to_owned();
+        let child = Table::create()
+            .table("child")
+            .col(
+                ColumnDef::new("id")
+                    .integer()
+                    .not_null()
+                    .auto_increment()
+                    .primary_key(),
+            )
+            .col(ColumnDef::new("user_id").integer().not_null())
+            .foreign_key(
+                ForeignKey::create()
+                    .name("fk-child-user")
+                    .from("child", "user_id")
+                    .to("users", "id"),
+            )
+            .foreign_key(
+                ForeignKey::create()
+                    .name("fk-child-legacy_user")
+                    .from("child", "user_id")
+                    .to("legacy_users", "id"),
+            )
+            .to_owned();
+
+        let entities: HashMap<_, _> =
+            EntityTransformer::transform(vec![users, legacy_users, child])?
+                .entities
+                .into_iter()
+                .map(|entity| (entity.table_name.clone(), entity))
+                .collect();
+
+        let child = entities.get("child").expect("missing entity `child`");
+        let user_id_col = child
+            .columns
+            .iter()
+            .find(|c| c.name == "user_id")
+            .expect("missing user_id column");
+
+        // Both FKs are real and `refs: Vec<ColumnRef>` records both. The
+        // earlier scalar `Option<String>` would have lost one parent to
+        // overwrite; we now keep them all.
+        assert_eq!(
+            user_id_col.refs.len(),
+            2,
+            "expected both FKs recorded, got refs = {:?}",
+            user_id_col.refs
+        );
+        assert!(user_id_col.refs.iter().any(|r| r.table == "users"));
+        assert!(user_id_col.refs.iter().any(|r| r.table == "legacy_users"));
 
         Ok(())
     }

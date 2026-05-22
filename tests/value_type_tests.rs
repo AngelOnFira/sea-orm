@@ -36,6 +36,12 @@ async fn main() -> Result<(), DbErr> {
     insert_value_pk(&ctx.db).await?;
     insert_value_token_pk(&ctx.db).await?;
 
+    #[cfg(feature = "with-uuid")]
+    {
+        create_value_type_uuid_pk_table(&ctx.db).await?;
+        insert_value_uuid_pk(&ctx.db).await?;
+    }
+
     if cfg!(feature = "sqlx-postgres") {
         create_value_type_postgres_table(&ctx.db).await?;
         insert_value_postgres(&ctx.db).await?;
@@ -79,6 +85,25 @@ pub async fn insert_value_pk(db: &DatabaseConnection) -> Result<(), DbErr> {
         MyInteger(3)
     );
 
+    Ok(())
+}
+
+#[cfg(feature = "with-uuid")]
+pub async fn insert_value_uuid_pk(db: &DatabaseConnection) -> Result<(), DbErr> {
+    use common::features::value_type::{UuidPk, value_type_uuid_pk};
+    let the_uuid = uuid::Uuid::new_v4();
+    let model = value_type_uuid_pk::Model {
+        id: UuidPk(the_uuid),
+        note: "uuid pk round-trip".to_string(),
+    };
+    let result = model.clone().into_active_model().insert(db).await?;
+    assert_eq!(result, model);
+
+    let fetched = value_type_uuid_pk::Entity::find_by_id(UuidPk(the_uuid))
+        .one(db)
+        .await?
+        .expect("uuid pk row should be readable");
+    assert_eq!(fetched, model);
     Ok(())
 }
 

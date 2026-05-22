@@ -2,8 +2,7 @@
 
 use sea_orm::entity::prelude::*;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, DeriveValueType)]
-pub struct FillingId(pub i32);
+pub type FillingId = sea_orm::Id<Entity, i32>;
 
 #[sea_orm::model]
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
