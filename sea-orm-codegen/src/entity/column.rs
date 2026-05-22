@@ -3,7 +3,14 @@ use heck::{ToSnakeCase, ToUpperCamelCase};
 use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
 use sea_query::{ColumnDef, ColumnType, StringLen};
+use std::collections::HashMap;
 use std::fmt::Write as FmtWrite;
+use std::rc::Rc;
+
+/// Maps `(table_name, column_name)` to the generated PK newtype identifier
+/// (e.g. `("cake", "id") -> Ident("CakeId")`). Built once per
+/// `write_entities` call when `--with-pk-newtypes` is enabled.
+pub type PkNewtypeIndex = HashMap<(String, String), Ident>;
 
 #[derive(Debug, Clone)]
 pub struct Column {
@@ -22,10 +29,18 @@ pub struct Column {
     pub(crate) ref_column: Option<String>,
 }
 
-#[derive(Debug, Default, Copy, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct ColumnOption {
     pub(crate) date_time_crate: DateTimeCrate,
     pub(crate) big_integer_type: BigIntegerType,
+    /// Name of the table currently being emitted. Set when
+    /// `pk_newtype_index` is populated so `get_rs_type` can look up
+    /// "is this column a PK in its own table?".
+    pub(crate) current_table: Option<String>,
+    /// `(table_name, column_name) -> newtype Ident`. When present,
+    /// PK columns emit the local newtype name and FK columns emit
+    /// `super::ref_table::RefTableId`.
+    pub(crate) pk_newtype_index: Option<Rc<PkNewtypeIndex>>,
 }
 
 impl Column {
@@ -105,10 +120,41 @@ impl Column {
                 _ => unimplemented!(),
             }
         }
-        let ident: TokenStream = write_rs_type(&self.col_type, opt).parse().unwrap();
+        // PK-newtype mode: if the column is a PK in its own table, or
+        // an FK pointing at another table's PK, emit the per-entity
+        // newtype identifier instead of the raw scalar type.
+        let inner: TokenStream = if let (Some(index), Some(current_table)) = (
+            opt.pk_newtype_index.as_deref(),
+            opt.current_table.as_deref(),
+        ) {
+            if let Some(ident) = index.get(&(current_table.to_owned(), self.name.clone())) {
+                // This column is a PK in its own table.
+                quote! { #ident }
+            } else if let (Some(ref_table), Some(ref_column)) =
+                (self.ref_table.as_deref(), self.ref_column.as_deref())
+            {
+                if let Some(ident) = index.get(&(ref_table.to_owned(), ref_column.to_owned())) {
+                    if ref_table == current_table {
+                        // Self-referencing FK — emit local name (no super::).
+                        quote! { #ident }
+                    } else {
+                        let module =
+                            format_ident!("{}", escape_rust_keyword(ref_table.to_snake_case()));
+                        quote! { super::#module::#ident }
+                    }
+                } else {
+                    write_rs_type(&self.col_type, opt).parse().unwrap()
+                }
+            } else {
+                write_rs_type(&self.col_type, opt).parse().unwrap()
+            }
+        } else {
+            write_rs_type(&self.col_type, opt).parse().unwrap()
+        };
+
         match self.not_null {
-            true => quote! { #ident },
-            false => quote! { Option<#ident> },
+            true => quote! { #inner },
+            false => quote! { Option<#inner> },
         }
     }
 
@@ -328,6 +374,8 @@ mod tests {
         ColumnOption {
             date_time_crate: DateTimeCrate::Chrono,
             big_integer_type: Default::default(),
+            current_table: None,
+            pk_newtype_index: None,
         }
     }
 
@@ -335,6 +383,8 @@ mod tests {
         ColumnOption {
             date_time_crate: DateTimeCrate::Time,
             big_integer_type: Default::default(),
+            current_table: None,
+            pk_newtype_index: None,
         }
     }
 

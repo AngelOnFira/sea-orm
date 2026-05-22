@@ -1,7 +1,8 @@
-use crate::{ActiveEnum, ColumnOption, Entity, util::escape_rust_keyword};
+use crate::{ActiveEnum, ColumnOption, Entity, PkNewtypeIndex, util::escape_rust_keyword};
 use heck::ToUpperCamelCase;
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
+use std::rc::Rc;
 use std::{collections::BTreeMap, str::FromStr};
 use syn::{punctuated::Punctuated, token::Comma};
 use tracing::info;
@@ -76,6 +77,36 @@ pub enum BannerVersion {
     Patch,
 }
 
+/// Controls whether codegen wraps each entity's primary key in a per-table
+/// newtype (e.g. `pub struct CakeId(pub i32);`) and propagates that
+/// wrapper to foreign-key column types.
+#[derive(Debug, Default, PartialEq, Eq, Copy, Clone)]
+pub enum PkNewtypeFormat {
+    /// Default — emit raw scalar types for primary keys.
+    #[default]
+    None,
+    /// Emit `pub struct <Table>Id(pub <inner>);` inline above the
+    /// `pub struct Model` declaration. Foreign keys become
+    /// `super::ref_table::RefTableId`.
+    Inline,
+}
+
+impl FromStr for PkNewtypeFormat {
+    type Err = crate::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "none" | "off" => Self::None,
+            "inline" => Self::Inline,
+            v => {
+                return Err(crate::Error::TransformError(format!(
+                    "Unsupported PkNewtypeFormat variant '{v}'"
+                )));
+            }
+        })
+    }
+}
+
 #[derive(Debug)]
 pub struct EntityWriterContext {
     pub(crate) entity_format: EntityFormat,
@@ -96,6 +127,7 @@ pub struct EntityWriterContext {
     pub(crate) seaography: bool,
     pub(crate) impl_active_model_behavior: bool,
     pub(crate) banner_version: BannerVersion,
+    pub(crate) pk_newtype_format: PkNewtypeFormat,
 }
 
 impl WithSerde {
@@ -125,6 +157,21 @@ impl WithSerde {
         }
         extra_derive
     }
+}
+
+/// Strip a single outer `Option<...>` wrapper from a Rust type token stream.
+/// Used to render the inner type for PK newtype declarations: a PK column
+/// is always NOT NULL but `Column::get_rs_type` defensively wraps optional
+/// types in `Option<_>`, which we don't want inside the wrapper struct.
+fn strip_optional(ts: TokenStream) -> TokenStream {
+    let s = ts.to_string();
+    let trimmed = s.split_whitespace().collect::<String>();
+    if let Some(rest) = trimmed.strip_prefix("Option<") {
+        if let Some(inner) = rest.strip_suffix('>') {
+            return inner.parse().unwrap_or(ts);
+        }
+    }
+    ts
 }
 
 /// Converts *_extra_derives argument to token stream
@@ -234,6 +281,7 @@ impl EntityWriterContext {
         seaography: bool,
         impl_active_model_behavior: bool,
         banner_version: BannerVersion,
+        pk_newtype_format: PkNewtypeFormat,
     ) -> Self {
         Self {
             entity_format,
@@ -254,13 +302,23 @@ impl EntityWriterContext {
             seaography,
             impl_active_model_behavior,
             banner_version,
+            pk_newtype_format,
         }
     }
 
-    fn column_option(&self) -> ColumnOption {
+    /// Per-entity `ColumnOption`. When `pk_newtype_index` is `Some`, the
+    /// `current_table` is also set so `Column::get_rs_type` can answer
+    /// "is this column a PK in its own table?".
+    fn column_option(
+        &self,
+        entity: &Entity,
+        pk_newtype_index: Option<&Rc<PkNewtypeIndex>>,
+    ) -> ColumnOption {
         ColumnOption {
             date_time_crate: self.date_time_crate,
             big_integer_type: self.big_integer_type,
+            current_table: pk_newtype_index.map(|_| entity.table_name.clone()),
+            pk_newtype_index: pk_newtype_index.cloned(),
         }
     }
 }
@@ -297,14 +355,21 @@ impl EntityWriter {
     }
 
     pub fn write_entities(&self, context: &EntityWriterContext) -> Vec<OutputFile> {
+        let pk_newtype_index = if context.pk_newtype_format == PkNewtypeFormat::Inline {
+            Some(Rc::new(Self::build_pk_newtype_index(&self.entities)))
+        } else {
+            None
+        };
+
         self.entities
             .iter()
             .map(|entity| {
                 let entity_file = format!("{}.rs", entity.get_table_name_snake_case());
+                let column_option = context.column_option(entity, pk_newtype_index.as_ref());
                 let column_info = entity
                     .columns
                     .iter()
-                    .map(|column| column.get_info(&context.column_option()))
+                    .map(|column| column.get_info(&column_option))
                     .collect::<Vec<String>>();
                 // Serde must be enabled to use this
                 let serde_skip_deserializing_primary_key = context
@@ -323,11 +388,12 @@ impl EntityWriter {
 
                 let mut lines = Vec::new();
                 Self::write_doc_comment(&mut lines, context.banner_version);
+                let pk_newtype_decls = Self::gen_pk_newtype_decls(entity, &column_option);
                 let code_blocks = if context.entity_format == EntityFormat::Frontend {
                     Self::gen_frontend_code_blocks(
                         entity,
                         &context.with_serde,
-                        &context.column_option(),
+                        &column_option,
                         &context.schema_name,
                         serde_skip_deserializing_primary_key,
                         serde_skip_hidden_column,
@@ -341,7 +407,7 @@ impl EntityWriter {
                     Self::gen_expanded_code_blocks(
                         entity,
                         &context.with_serde,
-                        &context.column_option(),
+                        &column_option,
                         &context.schema_name,
                         serde_skip_deserializing_primary_key,
                         serde_skip_hidden_column,
@@ -355,7 +421,7 @@ impl EntityWriter {
                     Self::gen_dense_code_blocks(
                         entity,
                         &context.with_serde,
-                        &context.column_option(),
+                        &column_option,
                         &context.schema_name,
                         serde_skip_deserializing_primary_key,
                         serde_skip_hidden_column,
@@ -369,7 +435,7 @@ impl EntityWriter {
                     Self::gen_compact_code_blocks(
                         entity,
                         &context.with_serde,
-                        &context.column_option(),
+                        &column_option,
                         &context.schema_name,
                         serde_skip_deserializing_primary_key,
                         serde_skip_hidden_column,
@@ -380,6 +446,20 @@ impl EntityWriter {
                         context.impl_active_model_behavior,
                     )
                 };
+                // The first code block from each writer is the imports
+                // (`use sea_orm::entity::prelude::*;`). Splice the
+                // newtype wrapper declarations right after it so the
+                // file reads imports → wrappers → model → ….
+                let code_blocks: Vec<_> = if pk_newtype_decls.is_empty() {
+                    code_blocks
+                } else if let Some((imports, rest)) = code_blocks.split_first() {
+                    std::iter::once(imports.clone())
+                        .chain(pk_newtype_decls)
+                        .chain(rest.iter().cloned())
+                        .collect()
+                } else {
+                    pk_newtype_decls
+                };
                 Self::write(&mut lines, code_blocks);
                 OutputFile {
                     name: entity_file,
@@ -387,6 +467,68 @@ impl EntityWriter {
                 }
             })
             .collect()
+    }
+
+    /// Build the `(table, column) -> NewtypeIdent` lookup. One entry per PK
+    /// column, regardless of arity — composite PKs reuse the per-column
+    /// names (e.g. `cake_filling` has both `CakeId` and `FillingId`).
+    fn build_pk_newtype_index(entities: &[Entity]) -> PkNewtypeIndex {
+        let mut index = PkNewtypeIndex::new();
+        for entity in entities {
+            let table_camel = entity.table_name.to_upper_camel_case();
+            for pk in entity.primary_keys.iter() {
+                // For composite PKs, suffix each component column name with
+                // `Id` so the wrapper names are distinct (e.g. `CakeId`,
+                // `FillingId` for `cake_filling.{cake_id, filling_id}`).
+                let column_camel = pk.name.to_upper_camel_case();
+                let ident_str = if entity.primary_keys.len() == 1 {
+                    format!("{}Id", table_camel)
+                } else if column_camel.ends_with("Id") {
+                    column_camel.clone()
+                } else {
+                    format!("{}Id", column_camel)
+                };
+                let ident = format_ident!("{}", ident_str);
+                index.insert((entity.table_name.clone(), pk.name.clone()), ident);
+            }
+        }
+        index
+    }
+
+    /// Emit the `pub struct <Table>Id(pub <inner>);` wrapper declarations
+    /// for this entity's PK columns. Returns an empty vec when newtype
+    /// mode is off or the entity has no PKs.
+    fn gen_pk_newtype_decls(entity: &Entity, opt: &ColumnOption) -> Vec<TokenStream> {
+        let Some(index) = opt.pk_newtype_index.as_ref() else {
+            return Vec::new();
+        };
+        let mut decls = Vec::new();
+        // Render the inner type WITHOUT consulting the newtype index, so
+        // the wrapper struct holds the raw scalar (e.g. `pub struct CakeId(pub i32);`).
+        let raw_opt = ColumnOption {
+            date_time_crate: opt.date_time_crate,
+            big_integer_type: opt.big_integer_type,
+            current_table: None,
+            pk_newtype_index: None,
+        };
+        for pk in entity.primary_keys.iter() {
+            let Some(ident) = index.get(&(entity.table_name.clone(), pk.name.clone())) else {
+                continue;
+            };
+            let Some(column) = entity.columns.iter().find(|c| c.name == pk.name) else {
+                continue;
+            };
+            let inner_rs = column.get_rs_type(&raw_opt);
+            // Strip the `Option<...>` wrapping for the underlying inner type —
+            // PK columns are always NOT NULL but `get_rs_type` may wrap them
+            // if `not_null` happens to be false (defensive).
+            let inner_rs = strip_optional(inner_rs);
+            decls.push(quote! {
+                #[derive(Clone, Debug, PartialEq, Eq, Hash, DeriveValueType)]
+                pub struct #ident(pub #inner_rs);
+            });
+        }
+        decls
     }
 
     pub fn write_index_file(
@@ -871,8 +1013,9 @@ impl EntityWriter {
 #[cfg(test)]
 mod tests {
     use crate::{
-        Column, ColumnOption, ConjunctRelation, Entity, EntityWriter, PrimaryKey, Relation,
-        RelationType, WithSerde,
+        BannerVersion, BigIntegerType, Column, ColumnOption, ConjunctRelation, DateTimeCrate,
+        Entity, EntityFormat, EntityWriter, EntityWriterContext, PkNewtypeFormat, PrimaryKey,
+        Relation, RelationType, WithPrelude, WithSerde,
         entity::writer::{bonus_attributes, bonus_derive},
     };
     use pretty_assertions::assert_eq;
@@ -3354,5 +3497,105 @@ mod tests {
         }
 
         Ok(())
+    }
+
+    #[test]
+    fn pk_newtypes_emit_wrappers_and_thread_through_fks() {
+        use crate::EntityTransformer;
+        use sea_query::{ColumnDef, ForeignKey, Table};
+
+        let parent = Table::create()
+            .table("cake")
+            .col(
+                ColumnDef::new("id")
+                    .integer()
+                    .not_null()
+                    .auto_increment()
+                    .primary_key(),
+            )
+            .col(ColumnDef::new("name").string().not_null())
+            .to_owned();
+        let child = Table::create()
+            .table("fruit")
+            .col(
+                ColumnDef::new("id")
+                    .integer()
+                    .not_null()
+                    .auto_increment()
+                    .primary_key(),
+            )
+            .col(ColumnDef::new("cake_id").integer())
+            .foreign_key(
+                ForeignKey::create()
+                    .name("fk-fruit-cake")
+                    .from("fruit", "cake_id")
+                    .to("cake", "id"),
+            )
+            .to_owned();
+
+        let writer = EntityTransformer::transform(vec![parent, child]).unwrap();
+        let context = EntityWriterContext::new(
+            EntityFormat::Compact,
+            WithPrelude::None,
+            WithSerde::None,
+            false,
+            DateTimeCrate::Chrono,
+            BigIntegerType::I64,
+            None,
+            false,
+            false,
+            false,
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            false,
+            true,
+            BannerVersion::Off,
+            PkNewtypeFormat::Inline,
+        );
+        let output = writer.generate(&context);
+
+        let cake = output
+            .files
+            .iter()
+            .find(|f| f.name == "cake.rs")
+            .expect("missing cake.rs");
+        let fruit = output
+            .files
+            .iter()
+            .find(|f| f.name == "fruit.rs")
+            .expect("missing fruit.rs");
+
+        // The codegen output is rendered from a TokenStream so spacing is
+        // not stable across versions — normalize to whitespace-free strings
+        // and check that the expected sequences appear.
+        let cake_norm: String = cake.content.split_whitespace().collect();
+        let fruit_norm: String = fruit.content.split_whitespace().collect();
+
+        // Parent emits the wrapper above the model and the PK field is typed.
+        assert!(
+            cake_norm.contains("pubstructCakeId(pubi32)"),
+            "cake.rs should declare `pub struct CakeId(pub i32);` (got:\n{})",
+            cake.content
+        );
+        assert!(
+            cake_norm.contains("pubid:CakeId"),
+            "cake.rs should type `id` as `CakeId` (got:\n{})",
+            cake.content
+        );
+
+        // Child emits its own wrapper plus references the parent's via `super::cake::CakeId`.
+        assert!(
+            fruit_norm.contains("pubstructFruitId(pubi32)"),
+            "fruit.rs should declare `pub struct FruitId(pub i32);` (got:\n{})",
+            fruit.content
+        );
+        assert!(
+            fruit_norm.contains("super::cake::CakeId"),
+            "fruit.rs should reference parent PK as `super::cake::CakeId` (got:\n{})",
+            fruit.content
+        );
     }
 }

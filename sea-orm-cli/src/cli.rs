@@ -391,6 +391,13 @@ pub enum GenerateSubcommands {
             help = "Also generate a Mermaid ER diagram as `entities.mermaid` in the output directory"
         )]
         er_diagram: bool,
+
+        #[arg(
+            long,
+            default_value = "false",
+            help = "Wrap each table's primary key in a per-entity newtype (e.g. `CakeId(i32)`) and propagate it to foreign-key columns. Gives compile-time protection against passing the wrong id type to `find_by_id`."
+        )]
+        with_pk_newtypes: bool,
     },
 }
 

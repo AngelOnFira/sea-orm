@@ -76,6 +76,13 @@ impl EntityWriter {
                     attrs.push(quote! { primary_key });
                     if !col.auto_increment {
                         attrs.push(quote! { auto_increment = false });
+                    } else if column_option.pk_newtype_index.is_some() {
+                        // In newtype mode the field type is a wrapper, so
+                        // `DeriveEntityModel`'s integer-primitive allowlist
+                        // defaults `auto_increment` to false. Emit the
+                        // explicit `auto_increment` qualifier to preserve
+                        // the source schema's behavior.
+                        attrs.push(quote! { auto_increment });
                     }
                 }
                 if let Some(ts) = col.get_col_type_attrs() {
