@@ -250,14 +250,22 @@ pub fn expand_derive_entity_model(
                                         );
                                     }
                                 } else if meta.path.is_ident("auto_increment") {
-                                    let lit = meta.value()?.parse()?;
-                                    if let Lit::Bool(litbool) = lit {
-                                        is_auto_increment = litbool.value();
-                                        auto_increment = Some(litbool.value());
+                                    // Accept both forms:
+                                    //   #[sea_orm(primary_key, auto_increment = false)]
+                                    //   #[sea_orm(primary_key, auto_increment)]   (bare = true)
+                                    if meta.input.peek(syn::Token![=]) {
+                                        let lit = meta.value()?.parse()?;
+                                        if let Lit::Bool(litbool) = lit {
+                                            is_auto_increment = litbool.value();
+                                            auto_increment = Some(litbool.value());
+                                        } else {
+                                            return Err(meta.error(format!(
+                                                "Invalid auto_increment = {lit:?}"
+                                            )));
+                                        }
                                     } else {
-                                        return Err(
-                                            meta.error(format!("Invalid auto_increment = {lit:?}"))
-                                        );
+                                        is_auto_increment = true;
+                                        auto_increment = Some(true);
                                     }
                                 } else if meta.path.is_ident("comment") {
                                     comment = Some(meta.value()?.parse::<Lit>()?);

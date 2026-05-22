@@ -1,12 +1,15 @@
 use sea_orm::entity::prelude::*;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, DeriveValueType)]
+pub struct AttachmentId(pub i32);
+
 #[sea_orm::model]
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
 #[sea_orm(table_name = "attachment")]
 pub struct Model {
-    #[sea_orm(primary_key)]
-    pub id: i32,
-    pub post_id: Option<i32>,
+    #[sea_orm(primary_key, auto_increment)]
+    pub id: AttachmentId,
+    pub post_id: Option<super::post::PostId>,
     pub file: String,
     #[sea_orm(belongs_to, from = "post_id", to = "id")]
     pub post: HasOne<super::post::Entity>,

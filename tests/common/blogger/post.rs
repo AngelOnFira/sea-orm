@@ -1,12 +1,15 @@
 use sea_orm::entity::prelude::*;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, DeriveValueType)]
+pub struct PostId(pub i32);
+
 #[sea_orm::model]
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
 #[sea_orm(table_name = "post")]
 pub struct Model {
-    #[sea_orm(primary_key)]
-    pub id: i32,
-    pub user_id: i32,
+    #[sea_orm(primary_key, auto_increment)]
+    pub id: PostId,
+    pub user_id: super::user::UserId,
     pub title: String,
     #[sea_orm(belongs_to, from = "user_id", to = "id")]
     pub author: HasOne<super::user::Entity>,
