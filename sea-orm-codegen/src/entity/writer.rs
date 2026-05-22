@@ -900,6 +900,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "name".to_owned(),
@@ -908,6 +910,8 @@ mod tests {
                         not_null: false,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                 ],
                 relations: vec![Relation {
@@ -939,6 +943,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "filling_id".to_owned(),
@@ -947,6 +953,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                 ],
                 relations: vec![
@@ -993,6 +1001,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "filling_id".to_owned(),
@@ -1001,6 +1011,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "price".to_owned(),
@@ -1009,6 +1021,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                 ],
                 relations: vec![Relation {
@@ -1042,6 +1056,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "name".to_owned(),
@@ -1050,6 +1066,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                 ],
                 relations: vec![],
@@ -1071,6 +1089,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "name".to_owned(),
@@ -1079,6 +1099,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "cake_id".to_owned(),
@@ -1087,6 +1109,8 @@ mod tests {
                         not_null: false,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                 ],
                 relations: vec![
@@ -1128,6 +1152,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "_name_".to_owned(),
@@ -1136,6 +1162,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "fruitId".to_owned(),
@@ -1144,6 +1172,8 @@ mod tests {
                         not_null: false,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                 ],
                 relations: vec![Relation {
@@ -1172,6 +1202,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "testing".to_owned(),
@@ -1180,6 +1212,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "rust".to_owned(),
@@ -1188,6 +1222,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "keywords".to_owned(),
@@ -1196,6 +1232,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "type".to_owned(),
@@ -1204,6 +1242,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "typeof".to_owned(),
@@ -1212,6 +1252,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "crate".to_owned(),
@@ -1220,6 +1262,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "self".to_owned(),
@@ -1228,6 +1272,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "self_id1".to_owned(),
@@ -1236,6 +1282,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "self_id2".to_owned(),
@@ -1244,6 +1292,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "fruit_id1".to_owned(),
@@ -1252,6 +1302,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "fruit_id2".to_owned(),
@@ -1260,6 +1312,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "cake_id".to_owned(),
@@ -1268,6 +1322,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                 ],
                 relations: vec![
@@ -1342,6 +1398,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "name".to_owned(),
@@ -1350,6 +1408,8 @@ mod tests {
                         not_null: false,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "price".to_owned(),
@@ -1358,6 +1418,8 @@ mod tests {
                         not_null: false,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                 ],
                 relations: vec![Relation {
@@ -1389,6 +1451,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "name".to_owned(),
@@ -1397,6 +1461,8 @@ mod tests {
                         not_null: false,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "price".to_owned(),
@@ -1405,6 +1471,8 @@ mod tests {
                         not_null: false,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                 ],
                 relations: vec![Relation {
@@ -1436,6 +1504,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "integers".to_owned(),
@@ -1444,6 +1514,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "integers_opt".to_owned(),
@@ -1452,6 +1524,8 @@ mod tests {
                         not_null: false,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                 ],
                 relations: vec![],
@@ -1470,6 +1544,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "floats".to_owned(),
@@ -1478,6 +1554,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "doubles".to_owned(),
@@ -1486,6 +1564,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                 ],
                 relations: vec![],
@@ -1504,6 +1584,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "id2".to_owned(),
@@ -1512,6 +1594,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                 ],
                 relations: vec![Relation {
@@ -1545,6 +1629,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "parent_id1".to_owned(),
@@ -1553,6 +1639,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "parent_id2".to_owned(),
@@ -1561,6 +1649,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                 ],
                 relations: vec![Relation {
@@ -1589,6 +1679,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "b".to_owned(),
@@ -1597,6 +1689,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "c".to_owned(),
@@ -1605,6 +1699,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "d".to_owned(),
@@ -1613,6 +1709,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "e".to_owned(),
@@ -1621,6 +1719,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "f".to_owned(),
@@ -1629,6 +1729,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "g".to_owned(),
@@ -1637,6 +1739,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "h".to_owned(),
@@ -1645,6 +1749,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "i".to_owned(),
@@ -1653,6 +1759,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "j".to_owned(),
@@ -1661,6 +1769,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "k".to_owned(),
@@ -1671,6 +1781,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                 ],
                 relations: vec![],
@@ -2248,6 +2360,8 @@ mod tests {
                     not_null: true,
                     unique: false,
                     unique_key: None,
+                    ref_table: None,
+                    ref_column: None,
                 },
                 Column {
                     name: "name".to_owned(),
@@ -2256,6 +2370,8 @@ mod tests {
                     not_null: false,
                     unique: false,
                     unique_key: None,
+                    ref_table: None,
+                    ref_column: None,
                 },
                 Column {
                     name: "base_id".to_owned(),
@@ -2264,6 +2380,8 @@ mod tests {
                     not_null: false,
                     unique: false,
                     unique_key: None,
+                    ref_table: None,
+                    ref_column: None,
                 },
             ],
             relations: vec![
@@ -2951,6 +3069,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "payload".to_owned(),
@@ -2959,6 +3079,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "payload_binary".to_owned(),
@@ -2967,6 +3089,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                 ],
                 relations: vec![],
@@ -3048,6 +3172,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "first_tea".to_owned(),
@@ -3062,6 +3188,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "second_tea".to_owned(),
@@ -3076,6 +3204,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                 ],
                 relations: vec![],
@@ -3094,6 +3224,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "first_tea".to_owned(),
@@ -3108,6 +3240,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "second_tea".to_owned(),
@@ -3122,6 +3256,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                     Column {
                         name: "size".to_owned(),
@@ -3137,6 +3273,8 @@ mod tests {
                         not_null: true,
                         unique: false,
                         unique_key: None,
+                        ref_table: None,
+                        ref_column: None,
                     },
                 ],
                 relations: vec![],

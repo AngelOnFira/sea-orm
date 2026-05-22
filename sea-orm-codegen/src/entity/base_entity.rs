@@ -313,6 +313,8 @@ mod tests {
                     not_null: false,
                     unique: false,
                     unique_key: None,
+                    ref_table: None,
+                    ref_column: None,
                 },
                 Column {
                     name: "name".to_owned(),
@@ -321,6 +323,8 @@ mod tests {
                     not_null: false,
                     unique: false,
                     unique_key: None,
+                    ref_table: None,
+                    ref_column: None,
                 },
             ],
             relations: vec![

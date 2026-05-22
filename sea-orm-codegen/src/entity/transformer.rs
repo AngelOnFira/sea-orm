@@ -124,6 +124,22 @@ impl EntityTransformer {
                             .collect::<Vec<_>>()
                     }),
             );
+            // Populate per-column FK back-references from the relations.
+            // After this, any FK column carries `ref_table` (parent table
+            // name) and `ref_column` (parent's column name) so downstream
+            // codegen can resolve the referenced PK type without re-walking
+            // the relations.
+            for rel in relations.iter() {
+                if !matches!(rel.rel_type, RelationType::BelongsTo) {
+                    continue;
+                }
+                for (fk_col, parent_col) in rel.columns.iter().zip(rel.ref_columns.iter()) {
+                    if let Some(col) = columns.iter_mut().find(|c| &c.name == fk_col) {
+                        col.ref_table = Some(rel.ref_table.clone());
+                        col.ref_column = Some(parent_col.clone());
+                    }
+                }
+            }
             let entity = Entity {
                 table_name: table_name.clone(),
                 columns,
@@ -410,6 +426,65 @@ mod tests {
             ],
             vec![("indexes", include_str!("../tests_cfg/dense/indexes.rs"))],
         )?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn fk_columns_get_ref_table_and_ref_column_populated() -> Result<(), Box<dyn Error>> {
+        // parent has a unary PK; child has a single FK to parent.id
+        let parent_stmt = Table::create()
+            .table("parent")
+            .col(
+                ColumnDef::new("id")
+                    .integer()
+                    .not_null()
+                    .auto_increment()
+                    .primary_key(),
+            )
+            .to_owned();
+
+        let child_stmt = Table::create()
+            .table("child")
+            .col(
+                ColumnDef::new("id")
+                    .integer()
+                    .not_null()
+                    .auto_increment()
+                    .primary_key(),
+            )
+            .col(ColumnDef::new("parent_id").integer().not_null())
+            .foreign_key(
+                ForeignKey::create()
+                    .name("fk-child-parent_id")
+                    .from("child", "parent_id")
+                    .to("parent", "id"),
+            )
+            .to_owned();
+
+        let entities: HashMap<_, _> = EntityTransformer::transform(vec![parent_stmt, child_stmt])?
+            .entities
+            .into_iter()
+            .map(|entity| (entity.table_name.clone(), entity))
+            .collect();
+
+        let child = entities.get("child").expect("missing entity `child`");
+        let parent_id_col = child
+            .columns
+            .iter()
+            .find(|c| c.name == "parent_id")
+            .expect("missing parent_id column");
+        assert_eq!(parent_id_col.ref_table.as_deref(), Some("parent"));
+        assert_eq!(parent_id_col.ref_column.as_deref(), Some("id"));
+
+        // The PK column itself is not an FK — fields must stay None.
+        let id_col = child
+            .columns
+            .iter()
+            .find(|c| c.name == "id")
+            .expect("missing id column");
+        assert_eq!(id_col.ref_table, None);
+        assert_eq!(id_col.ref_column, None);
 
         Ok(())
     }

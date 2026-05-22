@@ -13,6 +13,13 @@ pub struct Column {
     pub(crate) not_null: bool,
     pub(crate) unique: bool,
     pub(crate) unique_key: Option<String>,
+    /// Set when this column participates in a `BelongsTo` relation — the
+    /// referenced table name. Populated by `EntityTransformer` from the
+    /// schema's foreign key constraints. `None` for non-FK columns.
+    pub(crate) ref_table: Option<String>,
+    /// Set when this column participates in a `BelongsTo` relation — the
+    /// referenced column name in the parent table.
+    pub(crate) ref_column: Option<String>,
 }
 
 #[derive(Debug, Default, Copy, Clone)]
@@ -304,6 +311,8 @@ impl From<&ColumnDef> for Column {
             not_null,
             unique,
             unique_key: None,
+            ref_table: None,
+            ref_column: None,
         }
     }
 }
@@ -339,6 +348,8 @@ mod tests {
                     not_null: false,
                     unique: false,
                     unique_key: None,
+                    ref_table: None,
+                    ref_column: None,
                 }
             };
         }
