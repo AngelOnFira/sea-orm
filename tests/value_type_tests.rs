@@ -9,8 +9,8 @@ pub use common::{
     TestContext,
     features::{
         value_type::{
-            MyInteger, StringVec, Tag1, Tag2, Tag3, Tag4, Tag5, value_type_general, value_type_pg,
-            value_type_pk,
+            MyInteger, StringVec, Tag1, Tag2, Tag3, Tag4, Tag5, Token, value_type_general,
+            value_type_pg, value_type_pk, value_type_token_pk,
         },
         *,
     },
@@ -27,12 +27,14 @@ use sea_query::{ArrayType, ColumnType, PostgresQueryBuilder, Value, ValueType, V
 async fn main() -> Result<(), DbErr> {
     type_test();
     conversion_test();
+    auto_increment_test();
 
     let ctx = TestContext::new("value_type_tests").await;
 
     create_value_type_table(&ctx.db).await?;
     insert_value_general(&ctx.db).await?;
     insert_value_pk(&ctx.db).await?;
+    insert_value_token_pk(&ctx.db).await?;
 
     if cfg!(feature = "sqlx-postgres") {
         create_value_type_postgres_table(&ctx.db).await?;
@@ -75,6 +77,25 @@ pub async fn insert_value_pk(db: &DatabaseConnection) -> Result<(), DbErr> {
             .unwrap()
             .val,
         MyInteger(3)
+    );
+
+    Ok(())
+}
+
+pub async fn insert_value_token_pk(db: &DatabaseConnection) -> Result<(), DbErr> {
+    let model = value_type_token_pk::Model {
+        id: Token("abc-123".to_string()),
+        note: "non-integer PK newtype".to_string(),
+    };
+    let result = model.clone().into_active_model().insert(db).await?;
+    assert_eq!(result, model);
+
+    assert_eq!(
+        value_type_token_pk::Entity::find_by_id(Token("abc-123".to_string()))
+            .one(db)
+            .await?
+            .unwrap(),
+        model
     );
 
     Ok(())
@@ -166,4 +187,45 @@ pub fn conversion_test() {
     let try_from_string_vec = <StringVec as ValueType>::try_from(Value::Char(Some('a')))
         .expect_err("should not be ok to convert char to stringvec");
     assert_eq!(try_from_string_vec.to_string(), ValueTypeErr.to_string());
+}
+
+/// Asserts the new auto-increment allowlist behavior. The macro defaults
+/// `auto_increment` to `true` only when the PK field type is literally one
+/// of the integer primitives (`i32`, `u64`, …). Any newtype wrapper
+/// (`MyInteger`, `Token`, `UuidPk`) defaults to `false` — opt in explicitly
+/// with `#[sea_orm(primary_key, auto_increment)]` when needed.
+///
+/// Combined with the delegating `TryFromU64` impl, this lets `Uuid`,
+/// `String`, and integer newtype PKs all work end-to-end.
+pub fn auto_increment_test() {
+    use sea_orm::PrimaryKeyTrait;
+
+    // MyInteger(i32) — newtype wrapper → default auto_increment false
+    assert!(
+        !<value_type_pk::PrimaryKey as PrimaryKeyTrait>::auto_increment(),
+        "MyInteger(i32) newtype PK should default to auto_increment = false"
+    );
+
+    // Token(String) — non-integer inner type → auto_increment false
+    assert!(
+        !<value_type_token_pk::PrimaryKey as PrimaryKeyTrait>::auto_increment(),
+        "Token(String) PK should default to auto_increment = false"
+    );
+
+    // `Uuid::try_from_u64` returns Err — confirm the newtype delegates and
+    // surfaces the same error variant (not a `TryFromIntError`).
+    #[cfg(feature = "with-uuid")]
+    {
+        use common::features::value_type::UuidPk;
+        use sea_orm::TryFromU64;
+        let err = UuidPk::try_from_u64(1).unwrap_err();
+        assert!(matches!(err, DbErr::ConvertFromU64(_)));
+    }
+
+    // `String::try_from_u64` returns Ok("n") — confirm the newtype delegates.
+    {
+        use sea_orm::TryFromU64;
+        let token = Token::try_from_u64(42).unwrap();
+        assert_eq!(token, Token("42".to_string()));
+    }
 }

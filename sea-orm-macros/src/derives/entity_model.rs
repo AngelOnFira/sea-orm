@@ -12,7 +12,13 @@ use syn::{
     token::Comma,
 };
 
-const NOT_AUTO_INCRE_TYPE_SUFFIX: [&str; 2] = ["String", "Uuid"];
+// PK types that default to `auto_increment = true`. Anything else
+// (newtype wrappers, `String`, `Uuid`, custom enums, …) defaults to
+// `auto_increment = false`. Users can always override explicitly with
+// `#[sea_orm(primary_key, auto_increment)]` or `auto_increment = false`.
+const AUTO_INCRE_INTEGER_TYPES: &[&str] = &[
+    "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "isize", "usize",
+];
 
 #[allow(dead_code)]
 fn convert_case(s: &str, case_style: CaseStyle) -> String {
@@ -464,12 +470,7 @@ pub fn expand_derive_entity_model(
                     let field_span = field.span();
 
                     if is_primary_key && auto_increment.is_none() {
-                        for suffix in NOT_AUTO_INCRE_TYPE_SUFFIX {
-                            if field_type.ends_with(suffix) {
-                                auto_increment = Some(false);
-                                break;
-                            }
-                        }
+                        auto_increment = Some(AUTO_INCRE_INTEGER_TYPES.contains(&field_type));
                     }
 
                     let sea_query_col_type =
