@@ -1,0 +1,13 @@
+error[E0308]: mismatched types
+  --> tests/value_type_pk_compile_fail/wrong_id_type.rs:31:38
+   |
+31 |     let _ = user::Entity::find_by_id(PostId(1));
+   |             ------------------------ ^^^^^^^^^ expected `UserId`, found `PostId`
+   |             |
+   |             arguments to this function are incorrect
+   |
+note: associated function defined here
+  --> src/entity/base_entity.rs
+   |
+   |     fn find_by_id(values: <Self::PrimaryKey as PrimaryKeyTrait>::ValueType) -> Select<Self> {
+   |        ^^^^^^^^^^

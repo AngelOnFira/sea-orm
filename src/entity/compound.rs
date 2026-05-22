@@ -19,12 +19,9 @@ pub trait EntityLoaderTrait<E: EntityTrait>: QueryFilter + QueryOrder + Clone {
     type ModelEx: ModelTrait<Entity = E>;
 
     /// Find a model by primary key
-    fn filter_by_id<T>(mut self, values: T) -> Self
-    where
-        T: Into<<E::PrimaryKey as PrimaryKeyTrait>::ValueType>,
-    {
+    fn filter_by_id(mut self, values: <E::PrimaryKey as PrimaryKeyTrait>::ValueType) -> Self {
         let mut keys = E::PrimaryKey::iter();
-        for v in values.into().into_value_tuple() {
+        for v in values.into_value_tuple() {
             if let Some(key) = keys.next() {
                 let col = key.into_column();
                 self.filter_mut(col.eq(v));

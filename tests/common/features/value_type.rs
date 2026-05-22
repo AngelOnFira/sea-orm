@@ -60,15 +60,6 @@ use sea_orm::entity::prelude::*;
 #[derive(Clone, Debug, PartialEq, Eq, DeriveValueType)]
 pub struct MyInteger(pub i32);
 
-impl<T> From<T> for MyInteger
-where
-    T: Into<i32>,
-{
-    fn from(v: T) -> MyInteger {
-        MyInteger(v.into())
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, DeriveValueType)]
 pub struct StringVec(pub Vec<String>);
 

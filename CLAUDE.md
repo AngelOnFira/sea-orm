@@ -150,6 +150,40 @@ db.get_schema_registry("my_crate::*")
     .await?;
 ```
 
+## Type-safe primary keys
+
+`find_by_id` / `filter_by_id` take the entity's `PrimaryKey::ValueType` exactly — no `Into` conversion. To get compile-time protection against passing the wrong id type, wrap each entity's PK in a per-entity newtype with `DeriveValueType`:
+
+```rust
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, DeriveValueType)]
+pub struct UserId(pub i32);
+
+#[sea_orm::model]
+#[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
+#[sea_orm(table_name = "user")]
+pub struct Model {
+    #[sea_orm(primary_key, auto_increment = false)]
+    pub id: UserId,
+    pub name: String,
+}
+```
+
+**Do not** add `impl From<i32> for UserId` (or any `From<inner>`). That re-opens the door to `find_by_id(1)` and defeats the safety contract. Construct ids explicitly with the tuple form: `UserId(1)`.
+
+For foreign keys, spell the column type with the parent's newtype too:
+
+```rust
+// post.rs
+pub struct Model {
+    #[sea_orm(primary_key)]
+    pub id: PostId,
+    pub user_id: super::user::UserId,
+    // ...
+}
+```
+
+The trybuild harness at `tests/value_type_pk_compile_fail/` pins this contract: any regression that re-allows `find_by_id(raw_int)` or cross-PK confusion will start compiling and fail the test.
+
 ## Anti-Patterns -- DO NOT DO THESE
 
 ### 1. Do not specify `column_type` on custom wrapper types
