@@ -6,7 +6,7 @@ pub type TagId = sea_orm::Id<Entity, i32>;
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
 #[sea_orm(table_name = "tag")]
 pub struct Model {
-    #[sea_orm(primary_key, auto_increment)]
+    #[sea_orm(primary_key)]
     pub id: TagId,
     pub tag: String,
     #[sea_orm(has_many, via = "post_tag")]

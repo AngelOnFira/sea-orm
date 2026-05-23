@@ -1,18 +1,18 @@
 use sea_orm::entity::prelude::*;
 
-pub type ProfileId = sea_orm::Id<Entity, i32>;
-
 #[sea_orm::model]
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
-#[sea_orm(table_name = "profile")]
+#[sea_orm(table_name = "snowflake_member")]
 pub struct Model {
     #[sea_orm(primary_key)]
-    pub id: ProfileId,
-    pub picture: String,
-    #[sea_orm(unique)]
+    pub guild_id: super::guild::GuildId,
+    #[sea_orm(primary_key)]
     pub user_id: super::user::UserId,
+    pub nickname: Option<String>,
+    #[sea_orm(belongs_to, from = "guild_id", to = "id")]
+    pub guild: Option<super::guild::Entity>,
     #[sea_orm(belongs_to, from = "user_id", to = "id")]
-    pub user: HasOne<super::user::Entity>,
+    pub user: Option<super::user::Entity>,
 }
 
 impl ActiveModelBehavior for ActiveModel {}
