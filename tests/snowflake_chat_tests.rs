@@ -17,9 +17,8 @@ use common::snowflake_chat::{
     user::{self, UserId},
 };
 use sea_orm::{ActiveValue::*, PrimaryKeyTrait, entity::*};
-use sea_orm_macros::test;
 
-#[test]
+#[sea_orm_macros::test]
 async fn auto_increment_resolves_via_trait_for_all_pks() -> Result<(), sea_orm::DbErr> {
     // Pure compile-time + macro-emit assertions. No DB roundtrip needed:
     // if the trait resolution silently flips to `false` for any of these,
@@ -36,7 +35,7 @@ async fn auto_increment_resolves_via_trait_for_all_pks() -> Result<(), sea_orm::
     Ok(())
 }
 
-#[test]
+#[sea_orm_macros::test]
 async fn snowflake_chat_end_to_end() -> Result<(), sea_orm::DbErr> {
     let ctx = TestContext::new("snowflake_chat_end_to_end").await;
     let db = &ctx.db;
