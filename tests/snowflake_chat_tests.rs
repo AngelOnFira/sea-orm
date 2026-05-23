@@ -16,7 +16,7 @@ use common::snowflake_chat::{
     channel, dm_thread, guild, member, message, reaction,
     user::{self, UserId},
 };
-use sea_orm::{ActiveValue::*, PrimaryKeyTrait, entity::*};
+use sea_orm::{ActiveValue::*, PrimaryKeyTrait, entity::*, query::*};
 
 #[sea_orm_macros::test]
 async fn auto_increment_resolves_via_trait_for_all_pks() -> Result<(), sea_orm::DbErr> {
