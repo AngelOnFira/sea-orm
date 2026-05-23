@@ -102,6 +102,7 @@ mod active_model_ex;
 mod active_value;
 #[cfg(feature = "with-arrow")]
 mod arrow_schema;
+mod auto_increment_hint;
 mod base_entity;
 pub(crate) mod column;
 mod column_def;
@@ -126,6 +127,7 @@ pub use active_model_ex::*;
 pub use active_value::*;
 #[cfg(feature = "with-arrow")]
 pub use arrow_schema::*;
+pub use auto_increment_hint::*;
 pub use base_entity::*;
 pub use column::*;
 pub use column_def::*;

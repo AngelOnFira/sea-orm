@@ -214,34 +214,30 @@ pub fn conversion_test() {
     assert_eq!(try_from_string_vec.to_string(), ValueTypeErr.to_string());
 }
 
-/// Asserts the auto-increment suffix-denylist heuristic. The macro
-/// defaults `auto_increment = true` for any PK whose textual type name
-/// does NOT end in `String` or `Uuid`. Newtype wrappers around integers
-/// (`MyInteger(i32)`, `RoleId(i64)`, …) and per-entity `Id<E, T>` aliases
-/// fall through the denylist and end up correctly auto-incrementing.
-/// Explicit string/uuid PKs (`Token(String)`, `UuidPk(Uuid)`) — and
-/// anything else — can opt out with `auto_increment = false`.
+/// Asserts that the `PkAutoIncrementHint` trait drives the default for
+/// `PrimaryKeyTrait::auto_increment()`. `DeriveValueType` emits a
+/// delegating impl on the wrapper that resolves through the inner type,
+/// so `MyInteger(i32)` → `true` (via the `i32` impl) and `Token(String)`
+/// → `false` (via the `String` impl) without any explicit annotation on
+/// the entity.
 ///
 /// Combined with the delegating `TryFromU64` impl, this lets `Uuid`,
 /// `String`, and integer newtype PKs all work end-to-end.
 pub fn auto_increment_test() {
     use sea_orm::PrimaryKeyTrait;
 
-    // MyInteger(i32) — integer newtype, name doesn't match the denylist
-    // suffixes → default auto_increment = true. This matches the
-    // intuitive expectation: an integer-backed PK without an explicit
-    // override should behave like the raw integer would.
+    // MyInteger(i32) — DeriveValueType propagates PkAutoIncrementHint
+    // through the inner i32 → defaults to true.
     assert!(
         <value_type_pk::PrimaryKey as PrimaryKeyTrait>::auto_increment(),
-        "MyInteger(i32) newtype PK should default to auto_increment = true"
+        "MyInteger(i32) newtype PK should resolve to auto_increment = true"
     );
 
-    // Token(String) — the suffix heuristic can't see through the
-    // wrapper, so the entity declares `auto_increment = false`
-    // explicitly. Verify that explicit override flows through.
+    // Token(String) — same propagation, but inner is String → false.
+    // No explicit annotation on the entity is required.
     assert!(
         !<value_type_token_pk::PrimaryKey as PrimaryKeyTrait>::auto_increment(),
-        "Token(String) PK with explicit `auto_increment = false` should report false"
+        "Token(String) PK should resolve to auto_increment = false via PkAutoIncrementHint"
     );
 
     // `Uuid::try_from_u64` returns Err — confirm the newtype delegates and

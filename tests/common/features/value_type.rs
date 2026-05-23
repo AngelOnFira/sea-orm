@@ -56,10 +56,9 @@ pub mod value_type_pk {
 }
 
 /// Token-typed (String) newtype primary key — exercises the delegating
-/// `TryFromU64` impl (`String::try_from_u64` returns `Ok(n.to_string())`).
-/// `auto_increment = false` is set explicitly because the textual
-/// suffix heuristic in the macro can't see through the `Token`
-/// wrapper to know its inner is `String`.
+/// `TryFromU64` impl (`String::try_from_u64` returns `Ok(n.to_string())`)
+/// and the `PkAutoIncrementHint` propagation through `DeriveValueType`
+/// (resolves to `false` via the inner `String`).
 pub mod value_type_token_pk {
     use super::*;
     use sea_orm::entity::prelude::*;
@@ -67,7 +66,7 @@ pub mod value_type_token_pk {
     #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
     #[sea_orm(table_name = "value_type_token_pk")]
     pub struct Model {
-        #[sea_orm(primary_key, auto_increment = false)]
+        #[sea_orm(primary_key)]
         pub id: Token,
         pub note: String,
     }
@@ -86,7 +85,7 @@ pub mod value_type_uuid_pk {
     #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
     #[sea_orm(table_name = "value_type_uuid_pk")]
     pub struct Model {
-        #[sea_orm(primary_key, auto_increment = false)]
+        #[sea_orm(primary_key)]
         pub id: UuidPk,
         pub note: String,
     }

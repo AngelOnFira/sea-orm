@@ -12,25 +12,6 @@ use syn::{
     token::Comma,
 };
 
-// PK type names whose **suffix** signals the column is NOT an
-// autoincrement: explicit string, UUID, or per-entity role-wrapper
-// (`UserFollowerPk*` naming for self-ref junctions). Anything else —
-// including hand-written newtype wrappers around integers (e.g.
-// `RoleId(pub i64)`) and per-entity `Id<E, T>` aliases (`CakeId`,
-// `UserId`) — defaults to `auto_increment = true`, matching SeaORM's
-// pre-`Id<E, T>` behavior.
-//
-// Users can always override explicitly with
-// `#[sea_orm(primary_key, auto_increment = false)]`.
-//
-// Why suffix-based rather than the integer-allowlist that was tried in
-// commit `ffe2ca46`: textual matching can't see through type aliases or
-// newtype wrappers, so an integer-only allowlist falsely flips real
-// integer PKs to non-autoincrement and produces the `Field 'id'
-// doesn't have a default value` MySQL/MariaDB CI breakage that
-// motivated this revert.
-const NOT_AUTO_INCRE_TYPE_SUFFIX: &[&str] = &["String", "Uuid"];
-
 #[allow(dead_code)]
 fn convert_case(s: &str, case_style: CaseStyle) -> String {
     match case_style {
@@ -488,13 +469,6 @@ pub fn expand_derive_entity_model(
                     };
                     let field_span = field.span();
 
-                    if is_primary_key && auto_increment.is_none() {
-                        let is_string_or_uuid = NOT_AUTO_INCRE_TYPE_SUFFIX
-                            .iter()
-                            .any(|suffix| field_type.ends_with(suffix));
-                        auto_increment = Some(!is_string_or_uuid);
-                    }
-
                     let sea_query_col_type =
                         super::value_type_match::column_type_expr(sql_type, field_type, field_span);
 
@@ -558,9 +532,19 @@ pub fn expand_derive_entity_model(
     }
 
     let primary_key = {
-        let auto_increment = match auto_increment {
-            Some(value) => value && primary_keys.len() == 1,
-            None => primary_keys.len() == 1,
+        // Composite primary keys never auto-increment. For single PKs, an
+        // explicit `#[sea_orm(auto_increment = ...)]` override wins; otherwise
+        // the default is resolved at trait-resolution time via
+        // `<FieldType as PkAutoIncrementHint>::IS_AUTO`. Resolving through the
+        // trait lets the macro see through `DeriveValueType` wrappers and
+        // `Id<E, T>` aliases that a textual heuristic could not.
+        let auto_increment_body = if primary_keys.len() != 1 {
+            quote! { false }
+        } else if let Some(value) = auto_increment {
+            quote! { #value }
+        } else {
+            let first = primary_key_types.first();
+            quote! { <#first as sea_orm::PkAutoIncrementHint>::IS_AUTO }
         };
         let primary_key_types = if primary_key_types.len() == 1 {
             let first = primary_key_types.first();
@@ -580,7 +564,7 @@ pub fn expand_derive_entity_model(
                 type ValueType = #primary_key_types;
 
                 fn auto_increment() -> bool {
-                    #auto_increment
+                    #auto_increment_body
                 }
             }
         }

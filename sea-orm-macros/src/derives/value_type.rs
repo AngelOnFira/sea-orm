@@ -243,6 +243,14 @@ impl DeriveValueTypeStruct {
                 }
             }
 
+            #[automatically_derived]
+            impl sea_orm::PkAutoIncrementHint for #name
+            where
+                #field_type: sea_orm::PkAutoIncrementHint,
+            {
+                const IS_AUTO: bool = <#field_type as sea_orm::PkAutoIncrementHint>::IS_AUTO;
+            }
+
             #try_from_u64_impl
 
             #impl_not_u8
@@ -339,6 +347,11 @@ impl DeriveValueTypeString {
                 fn into_active_value(self) -> sea_orm::ActiveValue<#name> {
                     sea_orm::ActiveValue::Set(self)
                 }
+            }
+
+            #[automatically_derived]
+            impl sea_orm::PkAutoIncrementHint for #name {
+                const IS_AUTO: bool = false;
             }
 
             #impl_not_u8
