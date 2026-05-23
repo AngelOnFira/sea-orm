@@ -45,10 +45,7 @@
 //! is `Id<user::Entity, i32>`: there's no `i32: Into<Id<user::Entity, i32>>`
 //! impl.
 //!
-//! ### Limits of the safety contract
-//!
-//! Rust's orphan rule permits a downstream crate (one that defines its own
-//! entity) to write:
+//! Note however, users can still explicitly write:
 //!
 //! ```ignore
 //! impl From<i32> for sea_orm::Id<crate::cake::Entity, i32> {
@@ -56,15 +53,7 @@
 //! }
 //! ```
 //!
-//! …and re-enable `cake::Entity::find_by_id(7_i32)` via the `Into` chain.
-//! This is permitted because the user's `cake::Entity` is a local type
-//! parameter to the foreign `From` / `Id`, satisfying the orphan rule.
-//!
-//! **The wrapper is a convention plus a soft fence, not a hard wall.** It
-//! catches accidental cross-entity confusion at compile time as long as
-//! callers don't deliberately add `From<inner>` impls. The trybuild
-//! fixtures at `tests/value_type_pk_compile_fail/` pin the contract for
-//! sea-orm's own code; downstream crates can defeat it at their own risk.
+//! ...and re-enable `cake::Entity::find_by_id(7_i32)` via the `Into` chain.
 
 use crate::{
     ColIdx, DbErr, EntityTrait, PrimaryKeyTrait, QueryResult, TryFromU64, TryGetError, TryGetable,

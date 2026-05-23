@@ -6,7 +6,7 @@ pub type PostId = sea_orm::Id<Entity, i32>;
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
 #[sea_orm(table_name = "post")]
 pub struct Model {
-    #[sea_orm(primary_key)]
+    #[sea_orm(primary_key, auto_increment)]
     pub id: PostId,
     pub user_id: super::user::UserId,
     pub title: String,

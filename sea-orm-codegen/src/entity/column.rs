@@ -14,7 +14,9 @@ pub type PkNewtypeIndex = HashMap<(String, String), Ident>;
 
 /// A single FK back-reference: this column points at `table.column`.
 /// A column may have more than one such ref if the same SQL column is
-/// constrained against multiple parents (legal SQL — see issue #N).
+/// constrained against multiple parents — see the
+/// `multi_fk_same_column_records_both_backrefs` test in
+/// `sea-orm-codegen/src/entity/transformer.rs` for an exercised example.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ColumnRef {
     pub table: String,
@@ -41,20 +43,35 @@ pub struct Column {
 pub struct ColumnOption {
     pub(crate) date_time_crate: DateTimeCrate,
     pub(crate) big_integer_type: BigIntegerType,
-    /// Name of the table currently being emitted. Set when
-    /// `pk_newtype_index` is populated so `get_rs_type` can look up
-    /// "is this column a PK in its own table?".
-    pub(crate) current_table: Option<String>,
-    /// `(table_name, column_name) -> alias Ident`. When present,
-    /// FK columns emit `super::ref_table::RefAlias` and own-PK columns
-    /// emit the local alias.
-    pub(crate) pk_newtype_index: Option<Rc<PkNewtypeIndex>>,
+    /// PK-newtype resolution context. `Some` exactly when the writer is
+    /// emitting under `--with-pk-newtypes`; `None` otherwise. Bundling
+    /// the three correlated fields together makes the invariant
+    /// "they're all set together or all absent" structural instead of
+    /// relying on implicit precedence between separate `Option`s.
+    pub(crate) pk_newtype: Option<PkNewtypeContext>,
+}
+
+/// Per-entity resolution context for `--with-pk-newtypes` codegen.
+///
+/// All three fields are populated together at the start of
+/// `write_entities`; `get_rs_type` consults them in a fixed order
+/// (role wrapper → FK parent → own PK → raw scalar) to decide the
+/// emitted Rust type for each column.
+#[derive(Debug, Clone)]
+pub struct PkNewtypeContext {
+    /// Name of the table currently being emitted. Used by
+    /// `get_rs_type` to look up "is this column a PK in its own table?"
+    /// against `pk_aliases`.
+    pub current_table: String,
+    /// `(table_name, column_name) -> alias Ident`. FK columns emit
+    /// `super::ref_table::RefAlias`; own-PK columns emit the local alias.
+    pub pk_aliases: Rc<PkNewtypeIndex>,
     /// `(own_table, fk_column) -> RoleWrapperIdent` for self-ref junction
     /// tables where multiple columns FK-reference the same parent.
-    /// Takes precedence over `pk_newtype_index` when resolving column
-    /// types, so the role-wrapped column emits its local wrapper struct
-    /// name rather than the parent's alias.
-    pub(crate) role_wrapper_index: Option<Rc<PkNewtypeIndex>>,
+    /// Checked **before** `pk_aliases` in the resolution chain, so a
+    /// role-wrapped column emits its local wrapper struct name rather
+    /// than the parent's alias.
+    pub role_wrappers: Rc<PkNewtypeIndex>,
 }
 
 impl Column {
@@ -134,30 +151,50 @@ impl Column {
                 _ => unimplemented!(),
             }
         }
-        // PK-newtype mode: resolve the field type in this order:
-        //   1. Role-wrapper index hit on (current_table, self.name) — the
-        //      column is one of several columns in this table that FK to
-        //      the same parent; emit the local role wrapper struct name.
-        //   2. The column is an FK (has refs); emit the parent's alias
-        //      (`super::ref::Alias` cross-module, or local if self-ref).
-        //   3. The column is the entity's own PK; emit the local alias.
-        //   4. Fall through to raw scalar.
+        // PK-newtype mode: resolve the column's emitted Rust type in a
+        // fixed precedence order. Each step is checked against the column
+        // currently being emitted (`(current_table, self.name)`):
         //
-        // For columns with multiple FK back-references (legal SQL: same
-        // column constrained against >1 parent), step 2 picks `refs[0]`.
-        let inner: TokenStream = if let (Some(index), Some(current_table)) = (
-            opt.pk_newtype_index.as_deref(),
-            opt.current_table.as_deref(),
-        ) {
+        //   1. Role wrapper. The column is one of several in this table
+        //      that FK to the same parent; emit the local per-column
+        //      wrapper struct. Example, on a `user_follower` junction
+        //      with both `user_id` and `follower_id` -> `user.id`:
+        //
+        //          pub user_id:     UserFollowerPkUserId,
+        //          pub follower_id: UserFollowerPkFollowerId,
+        //
+        //   2. FK to parent's PK alias. The column is a foreign key with
+        //      at least one back-reference recorded in `self.refs`; emit
+        //      the parent's alias (`super::ref::Alias` cross-module,
+        //      bare `Alias` if self-referencing). Example:
+        //
+        //          pub post_id: super::post::PostId,
+        //
+        //      A column may legally have >1 ref (the same SQL column
+        //      constrained against multiple parents) — in that case we
+        //      pick `refs[0]` and the rest is documented future work.
+        //   3. Own-PK alias. The column is this entity's primary key
+        //      (or part of a composite PK); emit the local alias.
+        //      Example:
+        //
+        //          pub id: CakeId,
+        //
+        //   4. Raw scalar. Not a PK, not an FK, no wrapper applies —
+        //      fall through to the inferred Rust scalar (`i32`,
+        //      `String`, ...) as if `--with-pk-newtypes` weren't on.
+        let inner: TokenStream = if let Some(ctx) = opt.pk_newtype.as_ref() {
+            let current_table = ctx.current_table.as_str();
+            let key = (current_table.to_owned(), self.name.clone());
+
             // Step 1: role wrapper
-            if let Some(role_index) = opt.role_wrapper_index.as_deref()
-                && let Some(ident) = role_index.get(&(current_table.to_owned(), self.name.clone()))
-            {
+            if let Some(ident) = ctx.role_wrappers.get(&key) {
                 quote! { #ident }
             }
             // Step 2: FK to parent's alias
             else if let Some(first_ref) = self.refs.first() {
-                if let Some(ident) = index.get(&(first_ref.table.clone(), first_ref.column.clone()))
+                if let Some(ident) = ctx
+                    .pk_aliases
+                    .get(&(first_ref.table.clone(), first_ref.column.clone()))
                 {
                     if first_ref.table == current_table {
                         // Self-referencing FK — emit local name (no super::).
@@ -174,7 +211,7 @@ impl Column {
                 }
             }
             // Step 3: own-PK alias
-            else if let Some(ident) = index.get(&(current_table.to_owned(), self.name.clone())) {
+            else if let Some(ident) = ctx.pk_aliases.get(&key) {
                 quote! { #ident }
             }
             // Step 4: raw scalar
@@ -406,9 +443,7 @@ mod tests {
         ColumnOption {
             date_time_crate: DateTimeCrate::Chrono,
             big_integer_type: Default::default(),
-            current_table: None,
-            pk_newtype_index: None,
-            role_wrapper_index: None,
+            pk_newtype: None,
         }
     }
 
@@ -416,9 +451,7 @@ mod tests {
         ColumnOption {
             date_time_crate: DateTimeCrate::Time,
             big_integer_type: Default::default(),
-            current_table: None,
-            pk_newtype_index: None,
-            role_wrapper_index: None,
+            pk_newtype: None,
         }
     }
 

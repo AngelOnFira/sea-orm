@@ -395,7 +395,7 @@ pub enum GenerateSubcommands {
         #[arg(
             long,
             default_value = "false",
-            help = "Wrap each table's primary key in a per-entity newtype (e.g. `CakeId(i32)`) and propagate it to foreign-key columns. Gives compile-time protection against passing the wrong id type to `find_by_id`."
+            help = "Wrap each table's primary key in a per-entity newtype (e.g. `CakeId(i32)`) and propagate it to foreign-key columns."
         )]
         with_pk_newtypes: bool,
     },

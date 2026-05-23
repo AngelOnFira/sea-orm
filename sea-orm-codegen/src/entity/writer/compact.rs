@@ -76,7 +76,7 @@ impl EntityWriter {
                     attrs.push(quote! { primary_key });
                     if !col.auto_increment {
                         attrs.push(quote! { auto_increment = false });
-                    } else if column_option.pk_newtype_index.is_some() {
+                    } else if column_option.pk_newtype.is_some() {
                         // In newtype mode the field type is a wrapper, so
                         // `DeriveEntityModel`'s integer-primitive allowlist
                         // defaults `auto_increment` to false. Emit the

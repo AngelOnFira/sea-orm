@@ -91,22 +91,6 @@ pub enum PkNewtypeFormat {
     Inline,
 }
 
-impl FromStr for PkNewtypeFormat {
-    type Err = crate::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(match s {
-            "none" | "off" => Self::None,
-            "inline" => Self::Inline,
-            v => {
-                return Err(crate::Error::TransformError(format!(
-                    "Unsupported PkNewtypeFormat variant '{v}'"
-                )));
-            }
-        })
-    }
-}
-
 #[derive(Debug)]
 pub struct EntityWriterContext {
     pub(crate) entity_format: EntityFormat,
@@ -306,21 +290,29 @@ impl EntityWriterContext {
         }
     }
 
-    /// Per-entity `ColumnOption`. When `pk_newtype_index` is `Some`, the
-    /// `current_table` is also set so `Column::get_rs_type` can answer
-    /// "is this column a PK in its own table?".
+    /// Per-entity `ColumnOption`. The `pk_newtype` context is populated
+    /// together (current_table + indexes) when `--with-pk-newtypes` is
+    /// on, or all left `None` otherwise. The bundling makes the
+    /// invariant "all set or none set" structural — there's no way to
+    /// hand `Column::get_rs_type` a half-populated state.
     fn column_option(
         &self,
         entity: &Entity,
-        pk_newtype_index: Option<&Rc<PkNewtypeIndex>>,
-        role_wrapper_index: Option<&Rc<PkNewtypeIndex>>,
+        pk_aliases: Option<&Rc<PkNewtypeIndex>>,
+        role_wrappers: Option<&Rc<PkNewtypeIndex>>,
     ) -> ColumnOption {
+        let pk_newtype = match (pk_aliases, role_wrappers) {
+            (Some(aliases), Some(roles)) => Some(crate::entity::column::PkNewtypeContext {
+                current_table: entity.table_name.clone(),
+                pk_aliases: Rc::clone(aliases),
+                role_wrappers: Rc::clone(roles),
+            }),
+            _ => None,
+        };
         ColumnOption {
             date_time_crate: self.date_time_crate,
             big_integer_type: self.big_integer_type,
-            current_table: pk_newtype_index.map(|_| entity.table_name.clone()),
-            pk_newtype_index: pk_newtype_index.cloned(),
-            role_wrapper_index: role_wrapper_index.cloned(),
+            pk_newtype,
         }
     }
 }
@@ -589,30 +581,32 @@ impl EntityWriter {
     /// produce NO declaration — they reuse the parent's alias directly via
     /// `Column::get_rs_type` resolution.
     fn gen_pk_newtype_decls(entity: &Entity, opt: &ColumnOption) -> Vec<TokenStream> {
-        let Some(pk_index) = opt.pk_newtype_index.as_ref() else {
+        use crate::entity::column::PkNewtypeContext;
+        let Some(ctx) = opt.pk_newtype.as_ref() else {
             return Vec::new();
         };
-        let role_index = opt.role_wrapper_index.as_ref();
         let mut decls = Vec::new();
-        // Render inner types without the newtype indexes so we get raw scalars
-        // (or, for role wrappers, the parent's alias resolved by ref).
+        // Render inner types without the newtype context so we get raw scalars
+        // (or, for role wrappers, the parent's alias resolved via FK ref).
         let raw_opt = ColumnOption {
             date_time_crate: opt.date_time_crate,
             big_integer_type: opt.big_integer_type,
-            current_table: None,
-            pk_newtype_index: None,
-            role_wrapper_index: None,
+            pk_newtype: None,
         };
-        // For role wrappers we want the parent's alias path, so we need an
-        // option that has the pk_newtype_index but NOT current_table (so
-        // the column resolves to its FK parent rather than to its own
-        // local alias).
+        // For role wrappers we want the parent's alias path, so we synthesize
+        // a context with the same `pk_aliases` but an empty `role_wrappers`
+        // map and a `current_table` that intentionally won't match anything
+        // in `pk_aliases` — that way `get_rs_type` falls through to the FK
+        // resolution branch (step 2) and emits `super::ref::ParentAlias`
+        // rather than the local own-PK alias (step 3).
         let parent_resolve_opt = ColumnOption {
             date_time_crate: opt.date_time_crate,
             big_integer_type: opt.big_integer_type,
-            current_table: Some(String::from("__synthetic_no_match__")),
-            pk_newtype_index: opt.pk_newtype_index.clone(),
-            role_wrapper_index: None,
+            pk_newtype: Some(PkNewtypeContext {
+                current_table: String::from("__synthetic_no_match__"),
+                pk_aliases: Rc::clone(&ctx.pk_aliases),
+                role_wrappers: Rc::new(PkNewtypeIndex::default()),
+            }),
         };
         for pk in entity.primary_keys.iter() {
             let Some(column) = entity.columns.iter().find(|c| c.name == pk.name) else {
@@ -628,8 +622,9 @@ impl EntityWriter {
             // macro's textual allowlist (i8…u64/String/Uuid) wouldn't fire,
             // and tuple-PK arity (composite junctions) would lose its
             // `TryFromU64` bound.
-            if let Some(role_index) = role_index
-                && let Some(ident) = role_index.get(&(entity.table_name.clone(), pk.name.clone()))
+            if let Some(ident) = ctx
+                .role_wrappers
+                .get(&(entity.table_name.clone(), pk.name.clone()))
             {
                 // Parent alias type, e.g. `super::user::UserId`.
                 let parent_ty = column.get_rs_type(&parent_resolve_opt);
@@ -650,7 +645,10 @@ impl EntityWriter {
 
             // Own-PK alias. Render the inner type as a raw scalar so the
             // alias is `pub type CakeId = sea_orm::Id<Entity, i32>;`.
-            let Some(ident) = pk_index.get(&(entity.table_name.clone(), pk.name.clone())) else {
+            let Some(ident) = ctx
+                .pk_aliases
+                .get(&(entity.table_name.clone(), pk.name.clone()))
+            else {
                 continue;
             };
             let inner_rs = column.get_rs_type(&raw_opt);
@@ -3631,7 +3629,7 @@ mod tests {
             .expect("missing fruit.rs");
 
         // The codegen output is rendered from a TokenStream so spacing is
-        // not stable across versions — normalize to whitespace-free strings
+        // not stable across versions, so we normalize to whitespace-free strings
         // and check that the expected sequences appear.
         let cake_norm: String = cake.content.split_whitespace().collect();
         let fruit_norm: String = fruit.content.split_whitespace().collect();

@@ -6,7 +6,7 @@ pub type AttachmentId = sea_orm::Id<Entity, i32>;
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
 #[sea_orm(table_name = "attachment")]
 pub struct Model {
-    #[sea_orm(primary_key)]
+    #[sea_orm(primary_key, auto_increment)]
     pub id: AttachmentId,
     pub post_id: Option<super::post::PostId>,
     pub file: String,

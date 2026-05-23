@@ -6,7 +6,7 @@ pub type ProfileId = sea_orm::Id<Entity, i32>;
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
 #[sea_orm(table_name = "profile")]
 pub struct Model {
-    #[sea_orm(primary_key)]
+    #[sea_orm(primary_key, auto_increment)]
     pub id: ProfileId,
     pub picture: String,
     #[sea_orm(unique)]

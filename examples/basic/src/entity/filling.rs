@@ -8,7 +8,7 @@ pub type FillingId = sea_orm::Id<Entity, i32>;
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
 #[sea_orm(table_name = "filling")]
 pub struct Model {
-    #[sea_orm(primary_key)]
+    #[sea_orm(primary_key, auto_increment)]
     pub id: FillingId,
     pub name: String,
     #[sea_orm(has_many, via = "cake_filling")]

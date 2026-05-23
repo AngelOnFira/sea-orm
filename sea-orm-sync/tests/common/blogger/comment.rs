@@ -6,7 +6,7 @@ pub type CommentId = sea_orm::Id<Entity, i32>;
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
 #[sea_orm(table_name = "comment")]
 pub struct Model {
-    #[sea_orm(primary_key)]
+    #[sea_orm(primary_key, auto_increment)]
     pub id: CommentId,
     pub comment: String,
     pub user_id: super::user::UserId,
