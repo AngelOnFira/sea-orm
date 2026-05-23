@@ -12,13 +12,24 @@ use syn::{
     token::Comma,
 };
 
-// PK types that default to `auto_increment = true`. Anything else
-// (newtype wrappers, `String`, `Uuid`, custom enums, …) defaults to
-// `auto_increment = false`. Users can always override explicitly with
-// `#[sea_orm(primary_key, auto_increment)]` or `auto_increment = false`.
-const AUTO_INCRE_INTEGER_TYPES: &[&str] = &[
-    "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "isize", "usize",
-];
+// PK type names whose **suffix** signals the column is NOT an
+// autoincrement: explicit string, UUID, or per-entity role-wrapper
+// (`UserFollowerPk*` naming for self-ref junctions). Anything else —
+// including hand-written newtype wrappers around integers (e.g.
+// `RoleId(pub i64)`) and per-entity `Id<E, T>` aliases (`CakeId`,
+// `UserId`) — defaults to `auto_increment = true`, matching SeaORM's
+// pre-`Id<E, T>` behavior.
+//
+// Users can always override explicitly with
+// `#[sea_orm(primary_key, auto_increment = false)]`.
+//
+// Why suffix-based rather than the integer-allowlist that was tried in
+// commit `ffe2ca46`: textual matching can't see through type aliases or
+// newtype wrappers, so an integer-only allowlist falsely flips real
+// integer PKs to non-autoincrement and produces the `Field 'id'
+// doesn't have a default value` MySQL/MariaDB CI breakage that
+// motivated this revert.
+const NOT_AUTO_INCRE_TYPE_SUFFIX: &[&str] = &["String", "Uuid"];
 
 #[allow(dead_code)]
 fn convert_case(s: &str, case_style: CaseStyle) -> String {
@@ -478,7 +489,10 @@ pub fn expand_derive_entity_model(
                     let field_span = field.span();
 
                     if is_primary_key && auto_increment.is_none() {
-                        auto_increment = Some(AUTO_INCRE_INTEGER_TYPES.contains(&field_type));
+                        let is_string_or_uuid = NOT_AUTO_INCRE_TYPE_SUFFIX
+                            .iter()
+                            .any(|suffix| field_type.ends_with(suffix));
+                        auto_increment = Some(!is_string_or_uuid);
                     }
 
                     let sea_query_col_type =

@@ -34,20 +34,16 @@ mod alias_pk {
     impl ActiveModelBehavior for ActiveModel {}
 }
 
-// Currently expected to fail — documents an OPEN bug (type-alias PK
-// regression) that's out of scope for the hybrid-Id<E, T> commit. The
-// fix lives in `sea-orm-macros/src/derives/entity_model.rs` and will be
-// addressed in a follow-up commit. `#[ignore]` keeps CI green without
-// deleting the regression test.
+// Auto-increment heuristic: the macro now defaults to `true` for any
+// PK whose textual type does NOT end in `String` or `Uuid`. A type
+// alias to `i32` (or hand-written newtype wrapper) falls through the
+// suffix denylist and ends up correctly auto-incrementing — matching
+// what users expect from a `pub id: <SomeIdAlias>` column.
 #[test]
-#[ignore = "documents out-of-scope auto-increment heuristic bug; \
-            will be addressed in a follow-up commit"]
 fn alias_pk_should_still_be_auto_increment() {
-    // The inner type is literally `i32`. Anything else is a regression.
     assert!(
         alias_pk::PrimaryKey::auto_increment(),
-        "PK with type-alias-to-i32 should default to auto_increment = true, \
-         but the textual allowlist treats `LegacyUserId` as non-integer"
+        "PK with type-alias-to-i32 should default to auto_increment = true"
     );
 }
 
