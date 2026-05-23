@@ -55,19 +55,58 @@ pub mod value_type_pk {
     impl ActiveModelBehavior for ActiveModel {}
 }
 
+/// Token-typed (String) newtype primary key — exercises the delegating
+/// `TryFromU64` impl (`String::try_from_u64` returns `Ok(n.to_string())`)
+/// and the `PkAutoIncrementHint` propagation through `DeriveValueType`
+/// (resolves to `false` via the inner `String`).
+pub mod value_type_token_pk {
+    use super::*;
+    use sea_orm::entity::prelude::*;
+
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
+    #[sea_orm(table_name = "value_type_token_pk")]
+    pub struct Model {
+        #[sea_orm(primary_key)]
+        pub id: Token,
+        pub note: String,
+    }
+
+    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+    pub enum Relation {}
+
+    impl ActiveModelBehavior for ActiveModel {}
+}
+
+#[cfg(feature = "with-uuid")]
+pub mod value_type_uuid_pk {
+    use super::*;
+    use sea_orm::entity::prelude::*;
+
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
+    #[sea_orm(table_name = "value_type_uuid_pk")]
+    pub struct Model {
+        #[sea_orm(primary_key)]
+        pub id: UuidPk,
+        pub note: String,
+    }
+
+    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+    pub enum Relation {}
+
+    impl ActiveModelBehavior for ActiveModel {}
+}
+
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, Eq, DeriveValueType)]
 pub struct MyInteger(pub i32);
 
-impl<T> From<T> for MyInteger
-where
-    T: Into<i32>,
-{
-    fn from(v: T) -> MyInteger {
-        MyInteger(v.into())
-    }
-}
+#[derive(Clone, Debug, PartialEq, Eq, Hash, DeriveValueType)]
+pub struct Token(pub String);
+
+#[cfg(feature = "with-uuid")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, DeriveValueType)]
+pub struct UuidPk(pub uuid::Uuid);
 
 #[derive(Clone, Debug, PartialEq, Eq, DeriveValueType)]
 pub struct StringVec(pub Vec<String>);

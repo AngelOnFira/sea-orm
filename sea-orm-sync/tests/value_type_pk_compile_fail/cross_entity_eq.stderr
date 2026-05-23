@@ -1,0 +1,26 @@
+error[E0308]: mismatched types
+  --> tests/value_type_pk_compile_fail/cross_entity_eq.rs:40:37
+   |
+40 |     let _ = user::UserId::new(7) == post::PostId::new(7);
+   |                                     ^^^^^^^^^^^^^^^^^^^^ expected `user::Entity`, found `post::Entity`
+   |
+   = note: `post::Entity` and `user::Entity` have similar names, but are actually distinct types
+note: `post::Entity` is defined in module `crate::post` of the current crate
+  --> tests/value_type_pk_compile_fail/cross_entity_eq.rs:26:43
+   |
+26 |     #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
+   |                                           ^^^^^^^^^^^^^^^^^
+note: `user::Entity` is defined in module `crate::user` of the current crate
+  --> tests/value_type_pk_compile_fail/cross_entity_eq.rs:11:43
+   |
+11 |     #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
+   |                                           ^^^^^^^^^^^^^^^^^
+   = note: this error originates in the derive macro `DeriveEntityModel` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unused import: `sea_orm::entity::prelude`
+ --> tests/value_type_pk_compile_fail/cross_entity_eq.rs:6:5
+  |
+6 | use sea_orm::entity::prelude::*;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default

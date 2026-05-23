@@ -1,0 +1,133 @@
+//! Adversarial tests for the `Id<E, T>` primary-key newtype.
+//!
+//! These tests pin behaviour the type-safety contract relies on:
+//!   - Serde shape: `Id<E, T>` is transparent (number/string, not an object).
+//!   - Hashability: typed PKs of different entities can coexist in distinct
+//!     `HashMap`s keyed by their newtype.
+//!   - Layout: `#[repr(transparent)]` actually holds (no phantom-overhead).
+//!   - Cross-entity equality is a compile error (covered separately by the
+//!     trybuild fixtures under `tests/value_type_pk_compile_fail/`).
+//!   - String-typed alias PK works through the macro.
+//!   - Option<TypedPk> for nullable FK serialises sensibly when the value
+//!     is `None` (covered indirectly by `active_model_ex_tests.rs` for the
+//!     DB round-trip; this is the in-memory serde counterpart).
+
+#![allow(unused_imports)]
+
+mod common;
+use common::blogger::{post, user};
+use sea_orm::EntityTrait;
+use std::collections::HashMap;
+use std::mem::size_of;
+
+#[test]
+fn layout_is_repr_transparent() {
+    assert_eq!(size_of::<post::PostId>(), size_of::<i32>());
+    assert_eq!(size_of::<user::UserId>(), size_of::<i32>());
+    assert_eq!(size_of::<Option<post::PostId>>(), size_of::<Option<i32>>());
+}
+
+#[test]
+fn typed_ids_are_hashable_in_separate_maps() {
+    let mut posts: HashMap<post::PostId, &str> = HashMap::new();
+    let mut users: HashMap<user::UserId, &str> = HashMap::new();
+    posts.insert(post::PostId::new(7), "post-7");
+    users.insert(user::UserId::new(7), "user-7");
+    assert_eq!(posts.get(&post::PostId::new(7)), Some(&"post-7"));
+    assert_eq!(users.get(&user::UserId::new(7)), Some(&"user-7"));
+    // Sanity: same inner value, different keyspace.
+    assert_eq!(posts.len(), 1);
+    assert_eq!(users.len(), 1);
+}
+
+#[test]
+fn copy_and_clone_only_when_inner_supports_them() {
+    // i32 is Copy → PostId is Copy.
+    let a = post::PostId::new(3);
+    let b = a; // Copy works.
+    assert_eq!(a, b);
+    let c = a.clone();
+    assert_eq!(a, c);
+}
+
+#[test]
+fn into_inner_round_trip() {
+    let id = post::PostId::new(42);
+    assert_eq!(id.into_inner(), 42i32);
+}
+
+#[test]
+fn display_delegates_to_inner() {
+    let id = post::PostId::new(101);
+    assert_eq!(format!("{}", id), "101");
+}
+
+#[test]
+fn debug_includes_entity_tag() {
+    // Without the entity tag, `Id<post,_>(7)` and `Id<user,_>(7)` would
+    // print identically in logs — defeating the wrapper's debugging value.
+    // The Debug impl prints `Id<<parent_module>::<EntityName>>(<inner>)`
+    // — last two `::` segments of `type_name::<E>()` — to disambiguate
+    // entities that conventionally all name their struct `Entity`.
+    let post_id = post::PostId::new(7);
+    let user_id = user::UserId::new(7);
+    let post_dbg = format!("{post_id:?}");
+    let user_dbg = format!("{user_id:?}");
+    // Module path varies (test, mod, …); just assert the entity-tag is
+    // present and the two values are distinguishable.
+    assert!(post_dbg.contains("post::Entity"), "got: {post_dbg}");
+    assert!(user_dbg.contains("user::Entity"), "got: {user_dbg}");
+    assert_ne!(
+        post_dbg, user_dbg,
+        "Debug output must distinguish post::Entity from user::Entity"
+    );
+    assert!(post_dbg.ends_with("(7)"));
+}
+
+#[cfg(feature = "with-json")]
+mod serde_shape {
+    use super::*;
+
+    #[test]
+    fn typed_id_serialises_as_bare_number() {
+        let id = post::PostId::new(7);
+        let v = serde_json::to_value(&id).expect("serialise");
+        assert_eq!(v, serde_json::json!(7));
+    }
+
+    #[test]
+    fn typed_id_deserialises_from_bare_number() {
+        let v = serde_json::json!(13);
+        let id: post::PostId = serde_json::from_value(v).expect("deserialise");
+        assert_eq!(id, post::PostId::new(13));
+    }
+
+    #[test]
+    fn option_typed_id_serialises_null_and_some() {
+        let none: Option<post::PostId> = None;
+        assert_eq!(
+            serde_json::to_value(&none).unwrap(),
+            serde_json::Value::Null
+        );
+        let some = Some(post::PostId::new(5));
+        assert_eq!(serde_json::to_value(&some).unwrap(), serde_json::json!(5));
+    }
+}
+
+// Compile-time guard: an `Id<E, String>` constructed from a string literal
+// must accept a `String` payload and survive a serde round-trip. Even
+// though the workspace doesn't currently use a string-PK newtype in its
+// fixtures, the macro path should accept it — exercised here via a
+// freestanding alias (no entity wiring needed).
+#[cfg(feature = "with-json")]
+#[test]
+fn string_typed_id_round_trips_through_serde() {
+    // Use the existing `user::Entity` as the phantom — we only need an
+    // `EntityTrait` impl; the inner-T behaviour is what's under test.
+    type StringPk = sea_orm::Id<user::Entity, String>;
+    let id: StringPk = sea_orm::Id::new("abc-xyz".to_string());
+    let v = serde_json::to_value(&id).unwrap();
+    assert_eq!(v, serde_json::json!("abc-xyz"));
+    let back: StringPk = serde_json::from_value(v).unwrap();
+    assert_eq!(back, sea_orm::Id::new("abc-xyz".to_string()));
+}

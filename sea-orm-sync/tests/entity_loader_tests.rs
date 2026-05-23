@@ -616,20 +616,20 @@ fn entity_loader_self_join_via() -> Result<(), DbErr> {
         .insert(db)?;
 
     user_follower::ActiveModel {
-        user_id: Set(alice.id),
-        follower_id: Set(bob.id),
+        user_id: Set(user_follower::UserFollowerPkUserId(alice.id)),
+        follower_id: Set(user_follower::UserFollowerPkFollowerId(bob.id)),
     }
     .insert(db)?;
 
     user_follower::ActiveModel {
-        user_id: Set(alice.id),
-        follower_id: Set(sam.id),
+        user_id: Set(user_follower::UserFollowerPkUserId(alice.id)),
+        follower_id: Set(user_follower::UserFollowerPkFollowerId(sam.id)),
     }
     .insert(db)?;
 
     user_follower::ActiveModel {
-        user_id: Set(bob.id),
-        follower_id: Set(sam.id),
+        user_id: Set(user_follower::UserFollowerPkUserId(bob.id)),
+        follower_id: Set(user_follower::UserFollowerPkFollowerId(sam.id)),
     }
     .insert(db)?;
 

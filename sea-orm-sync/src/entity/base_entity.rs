@@ -1,5 +1,5 @@
 use crate::{
-    ActiveModelBehavior, ActiveModelTrait, ColumnTrait, Delete, DeleteMany, DeleteOne,
+    ActiveModelBehavior, ActiveModelTrait, ColumnTrait, Delete, DeleteMany, DeleteOne, FindByIdArg,
     FromQueryResult, Identity, Insert, InsertMany, ModelTrait, PrimaryKeyArity, PrimaryKeyToColumn,
     PrimaryKeyTrait, QueryFilter, Related, RelationBuilder, RelationTrait, RelationType, Select,
     Update, UpdateMany, UpdateOne, ValidatedDeleteOne,
@@ -201,7 +201,30 @@ pub trait EntityTrait: EntityName {
         Select::<R>::new().join_join(JoinType::InnerJoin, R::to(), R::via())
     }
 
-    /// Find a model by primary key
+    /// Find a model by primary key.
+    ///
+    /// `values` must be exactly the entity's `PrimaryKey::ValueType` —
+    /// there is no implicit conversion. For unary PKs this is just the
+    /// scalar type (e.g. `i32`, `Uuid`); for composite PKs it is a tuple
+    /// (e.g. `(i32, String)`).
+    ///
+    /// # Type-safe PKs
+    ///
+    /// Wrap each entity's primary key in a per-entity newtype to get
+    /// compile-time protection against passing the wrong id type:
+    ///
+    /// ```ignore
+    /// use sea_orm::entity::prelude::*;
+    ///
+    /// #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, DeriveValueType)]
+    /// pub struct UserId(pub i32);
+    ///
+    /// // Now `user::Entity::find_by_id` accepts only `UserId`, not raw `i32`
+    /// // and not any other entity's id type.
+    /// ```
+    ///
+    /// Do **not** add `impl From<i32> for UserId` — that re-opens the door to
+    /// `find_by_id(1)` and defeats the safety contract.
     ///
     /// # Example
     ///
@@ -288,11 +311,11 @@ pub trait EntityTrait: EntityName {
     /// ```
     fn find_by_id<T>(values: T) -> Select<Self>
     where
-        T: Into<<Self::PrimaryKey as PrimaryKeyTrait>::ValueType>,
+        T: FindByIdArg<Self>,
     {
         let mut select = Self::find();
         let mut keys = Self::PrimaryKey::iter();
-        for v in values.into().into_value_tuple() {
+        for v in values.into_pk_value().into_value_tuple() {
             if let Some(key) = keys.next() {
                 let col = key.into_column();
                 select = select.filter(col.eq(v));
