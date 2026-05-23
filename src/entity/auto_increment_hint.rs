@@ -82,13 +82,36 @@ mod uuid_fmt_impls {
     }
 }
 
+/// Internal helper trait: marks a wrapper as delegating its
+/// `PkAutoIncrementHint` resolution to an inner type.
+///
+/// `DeriveValueType` emits an impl of this for every wrapper it
+/// generates, naming the wrapped inner type. The blanket
+/// `PkAutoIncrementHint` impl below then bridges from this trait,
+/// keeping the inner-type bound on a generic parameter (deferred at
+/// trait-resolution time) instead of a concrete-type `where` clause
+/// (eagerly checked at impl-declaration time, which would force a
+/// compile error on every wrapper whose inner doesn't impl
+/// `PkAutoIncrementHint`, even if the wrapper is never used as a PK).
+pub trait DelegatesPkAutoIncrementHint {
+    /// The inner type whose `PkAutoIncrementHint` impl is delegated to.
+    type Inner: ?Sized;
+}
+
+impl<T> PkAutoIncrementHint for T
+where
+    T: DelegatesPkAutoIncrementHint,
+    T::Inner: PkAutoIncrementHint,
+{
+    const IS_AUTO: bool = <T::Inner as PkAutoIncrementHint>::IS_AUTO;
+}
+
 /// `Id<E, T>` delegates to its inner `T`.
-impl<E, T> PkAutoIncrementHint for crate::Id<E, T>
+impl<E, T> DelegatesPkAutoIncrementHint for crate::Id<E, T>
 where
     E: EntityTrait,
-    T: PkAutoIncrementHint,
 {
-    const IS_AUTO: bool = T::IS_AUTO;
+    type Inner = T;
 }
 
 #[cfg(test)]

@@ -244,11 +244,8 @@ impl DeriveValueTypeStruct {
             }
 
             #[automatically_derived]
-            impl sea_orm::PkAutoIncrementHint for #name
-            where
-                #field_type: sea_orm::PkAutoIncrementHint,
-            {
-                const IS_AUTO: bool = <#field_type as sea_orm::PkAutoIncrementHint>::IS_AUTO;
+            impl sea_orm::DelegatesPkAutoIncrementHint for #name {
+                type Inner = #field_type;
             }
 
             #try_from_u64_impl
