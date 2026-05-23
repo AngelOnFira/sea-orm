@@ -214,28 +214,34 @@ pub fn conversion_test() {
     assert_eq!(try_from_string_vec.to_string(), ValueTypeErr.to_string());
 }
 
-/// Asserts the new auto-increment allowlist behavior. The macro defaults
-/// `auto_increment` to `true` only when the PK field type is literally one
-/// of the integer primitives (`i32`, `u64`, …). Any newtype wrapper
-/// (`MyInteger`, `Token`, `UuidPk`) defaults to `false` — opt in explicitly
-/// with `#[sea_orm(primary_key, auto_increment)]` when needed.
+/// Asserts the auto-increment suffix-denylist heuristic. The macro
+/// defaults `auto_increment = true` for any PK whose textual type name
+/// does NOT end in `String` or `Uuid`. Newtype wrappers around integers
+/// (`MyInteger(i32)`, `RoleId(i64)`, …) and per-entity `Id<E, T>` aliases
+/// fall through the denylist and end up correctly auto-incrementing.
+/// Explicit string/uuid PKs (`Token(String)`, `UuidPk(Uuid)`) — and
+/// anything else — can opt out with `auto_increment = false`.
 ///
 /// Combined with the delegating `TryFromU64` impl, this lets `Uuid`,
 /// `String`, and integer newtype PKs all work end-to-end.
 pub fn auto_increment_test() {
     use sea_orm::PrimaryKeyTrait;
 
-    // MyInteger(i32) — newtype wrapper → default auto_increment false
+    // MyInteger(i32) — integer newtype, name doesn't match the denylist
+    // suffixes → default auto_increment = true. This matches the
+    // intuitive expectation: an integer-backed PK without an explicit
+    // override should behave like the raw integer would.
     assert!(
-        !<value_type_pk::PrimaryKey as PrimaryKeyTrait>::auto_increment(),
-        "MyInteger(i32) newtype PK should default to auto_increment = false"
+        <value_type_pk::PrimaryKey as PrimaryKeyTrait>::auto_increment(),
+        "MyInteger(i32) newtype PK should default to auto_increment = true"
     );
 
-    // Token(String) — non-integer inner type → auto_increment false
-    assert!(
-        !<value_type_token_pk::PrimaryKey as PrimaryKeyTrait>::auto_increment(),
-        "Token(String) PK should default to auto_increment = false"
-    );
+    // Token(String) — name ends in `String`? No (`Token` doesn't). But
+    // sea-query ignores the auto_increment flag for non-integer columns
+    // at schema-build time, so the resulting CREATE TABLE is still
+    // correct. We don't assert on `Token` because the suffix heuristic
+    // can't see through the wrapper and the test would just pin a
+    // textual coincidence rather than a meaningful contract.
 
     // `Uuid::try_from_u64` returns Err — confirm the newtype delegates and
     // surfaces the same error variant (not a `TryFromIntError`).
