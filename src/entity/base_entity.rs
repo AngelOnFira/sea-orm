@@ -1,5 +1,5 @@
 use crate::{
-    ActiveModelBehavior, ActiveModelTrait, ColumnTrait, Delete, DeleteMany, DeleteOne,
+    ActiveModelBehavior, ActiveModelTrait, ColumnTrait, Delete, DeleteMany, DeleteOne, FindByIdArg,
     FromQueryResult, Identity, Insert, InsertMany, ModelTrait, PrimaryKeyArity, PrimaryKeyToColumn,
     PrimaryKeyTrait, QueryFilter, Related, RelationBuilder, RelationTrait, RelationType, Select,
     Update, UpdateMany, UpdateOne, ValidatedDeleteOne,
@@ -314,11 +314,11 @@ pub trait EntityTrait: EntityName {
     /// ```
     fn find_by_id<T>(values: T) -> Select<Self>
     where
-        T: Into<<Self::PrimaryKey as PrimaryKeyTrait>::ValueType>,
+        T: FindByIdArg<Self>,
     {
         let mut select = Self::find();
         let mut keys = Self::PrimaryKey::iter();
-        for v in values.into().into_value_tuple() {
+        for v in values.into_pk_value().into_value_tuple() {
             if let Some(key) = keys.next() {
                 let col = key.into_column();
                 select = select.filter(col.eq(v));

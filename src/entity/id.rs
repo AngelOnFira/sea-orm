@@ -44,11 +44,32 @@
 //! `user::Entity::find_by_id(7_i32)` fail to compile when the entity's PK
 //! is `Id<user::Entity, i32>`: there's no `i32: Into<Id<user::Entity, i32>>`
 //! impl.
+//!
+//! ### Limits of the safety contract
+//!
+//! Rust's orphan rule permits a downstream crate (one that defines its own
+//! entity) to write:
+//!
+//! ```ignore
+//! impl From<i32> for sea_orm::Id<crate::cake::Entity, i32> {
+//!     fn from(n: i32) -> Self { sea_orm::Id::new(n) }
+//! }
+//! ```
+//!
+//! …and re-enable `cake::Entity::find_by_id(7_i32)` via the `Into` chain.
+//! This is permitted because the user's `cake::Entity` is a local type
+//! parameter to the foreign `From` / `Id`, satisfying the orphan rule.
+//!
+//! **The wrapper is a convention plus a soft fence, not a hard wall.** It
+//! catches accidental cross-entity confusion at compile time as long as
+//! callers don't deliberately add `From<inner>` impls. The trybuild
+//! fixtures at `tests/value_type_pk_compile_fail/` pin the contract for
+//! sea-orm's own code; downstream crates can defeat it at their own risk.
 
 use crate::{
-    ColIdx, DbErr, EntityTrait, QueryResult, TryFromU64, TryGetError, TryGetable, TryGetableMany,
+    ColIdx, DbErr, EntityTrait, PrimaryKeyTrait, QueryResult, TryFromU64, TryGetError, TryGetable,
 };
-use sea_query::{ArrayType, ColumnType, FromValueTuple, IntoValueTuple, Nullable, Value, ValueTuple, ValueType, ValueTypeErr};
+use sea_query::{ArrayType, ColumnType, Nullable, Value, ValueType, ValueTypeErr};
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
@@ -66,9 +87,15 @@ use std::marker::PhantomData;
 pub struct Id<E: EntityTrait, T> {
     /// The raw stored value.
     pub value: T,
-    // PhantomData<fn() -> E> is variance-correct: invariant in E, so the
-    // compiler never widens an `Id<A>` to an `Id<B>` even if A: B somehow.
-    _marker: PhantomData<fn() -> E>,
+    // `PhantomData<fn(E) -> E>` makes `E` invariant: the function-pointer
+    // type has `E` in both contravariant (parameter) and covariant (return)
+    // position, which combine to invariant. This is what we want — the
+    // compiler must never widen an `Id<A, _>` to an `Id<B, _>` even if A
+    // and B are related. `fn() -> E` alone would be covariant; `fn(E)`
+    // alone would be contravariant; the combined form is the canonical
+    // way to spell invariance. Function-pointer types are unconditionally
+    // `Send + Sync`, so this preserves auto-traits.
+    _marker: PhantomData<fn(E) -> E>,
 }
 
 impl<E: EntityTrait, T> Id<E, T> {
@@ -101,7 +128,25 @@ impl<E: EntityTrait, T: Copy> Copy for Id<E, T> {}
 
 impl<E: EntityTrait, T: fmt::Debug> fmt::Debug for Id<E, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("Id").field(&self.value).finish()
+        // Include the entity tag so `Id<post::Entity, _>(7)` and
+        // `Id<user::Entity, _>(7)` don't look identical in logs — that
+        // defeats the entire reason this wrapper exists.
+        //
+        // Every entity struct is named `Entity` by convention, so the
+        // disambiguating part is the module that contains it. We render
+        // `<parent_module>::<EntityName>` — the last two `::`-segments
+        // of `std::any::type_name::<E>()`. Full paths are too verbose
+        // for log lines; the trailing two segments preserve the
+        // disambiguation while staying readable.
+        let full = std::any::type_name::<E>();
+        let mut tail = full.rsplitn(3, "::");
+        let last = tail.next().unwrap_or(full);
+        let prev = tail.next();
+        let label = match prev {
+            Some(p) => format!("{p}::{last}"),
+            None => last.to_owned(),
+        };
+        write!(f, "Id<{label}>({:?})", self.value)
     }
 }
 
@@ -213,6 +258,55 @@ impl<E: EntityTrait, T: Nullable> Nullable for Id<E, T> {
 // `Id::new(value)` is the only construction path. We deliberately do NOT
 // provide `impl<E, T> From<T> for Id<E, T>` — that would re-open the safety
 // hole the type is designed to prevent.
+
+// === FindByIdArg ============================================================
+//
+// `find_by_id` / `filter_by_id` accept anything convertible to the entity's
+// primary-key value type. We could bound that directly with `Into`, but doing
+// so makes the compiler's "this argument is wrong" diagnostic incomprehensible
+// — it reads something like
+//   `the trait bound `Id<user::Entity, i32>: From<Id<post::Entity, i32>>`
+//    is not satisfied`,
+// burying the two entity types inside generic args of `Into`.
+//
+// `FindByIdArg<E>` is a thin sea-orm-owned wrapper around that same `Into`
+// bound. It exists solely so we can attach `#[diagnostic::on_unimplemented]`
+// to it — diagnostics can't be attached to `Into` (a std trait). The blanket
+// impl forwards through `Into`, so every existing call site still works
+// without change. When the bound *fails*, the user sees a message that names
+// the entity and the argument type directly.
+//
+// MSRV is 1.85; `#[diagnostic::on_unimplemented]` is stable since 1.78.
+
+/// Helper bound used by `find_by_id` / `filter_by_id`.
+///
+/// Implemented for every `T` that converts into `E`'s primary-key value type
+/// via `Into`. This trait exists to provide a better compiler error than the
+/// raw `Into` bound when the argument doesn't match — see the module docs.
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` cannot be used as a primary-key argument for `{E}`",
+    label = "expected `{E}`'s `PrimaryKey::ValueType` (or something convertible to it), got `{Self}`",
+    note = "type-safe `Id<E, _>` wrappers deliberately do not impl `From<inner>` to prevent cross-entity ID confusion. Construct ids explicitly with `Id::new(..)` (or the per-entity alias's `::new`), and pass an id belonging to this entity."
+)]
+pub trait FindByIdArg<E: EntityTrait>: Sized {
+    /// Convert this argument into the entity's primary-key value tuple.
+    fn into_pk_value(self) -> <E::PrimaryKey as PrimaryKeyTrait>::ValueType;
+}
+
+// `do_not_recommend` (stable 1.85) tells rustc not to surface this blanket impl
+// in error messages when its where-clause fails. Without it, the user sees a
+// confusing message about `From<Id<post::Entity, _>>` not being implemented
+// for `Id<user::Entity, _>` — the deeper sub-bound — instead of the
+// `on_unimplemented` message on `FindByIdArg` itself.
+#[diagnostic::do_not_recommend]
+impl<E: EntityTrait, T> FindByIdArg<E> for T
+where
+    T: Into<<E::PrimaryKey as PrimaryKeyTrait>::ValueType>,
+{
+    fn into_pk_value(self) -> <E::PrimaryKey as PrimaryKeyTrait>::ValueType {
+        self.into()
+    }
+}
 
 // === Serde ==================================================================
 //

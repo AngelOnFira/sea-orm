@@ -497,9 +497,9 @@ impl EntityWriter {
             // <Table> already ends in `Id`), use `<Table>Pk` to avoid the
             // ugly doubled suffix.
             if table_camel.ends_with("Id") && suffix == "Id" {
-                format!("{}Pk", table_camel)
+                format!("{table_camel}Pk")
             } else {
-                format!("{}{}", table_camel, suffix)
+                format!("{table_camel}{suffix}")
             }
         }
 
@@ -515,7 +515,7 @@ impl EntityWriter {
                     // ColumnCamel already ends in `Id`, that's fine
                     // (`CakeFillingCakeId`).
                     let column_camel = pk.name.to_upper_camel_case();
-                    let combined = format!("{}{}", table_camel, column_camel);
+                    let combined = format!("{table_camel}{column_camel}");
                     if combined.ends_with("IdId") {
                         // e.g. table `cake_id`, col `id` → strip one Id.
                         format!("{}Id", &combined[..combined.len() - 4])
@@ -569,7 +569,7 @@ impl EntityWriter {
                 }
                 let table_camel = entity.table_name.to_upper_camel_case();
                 let col_camel = col.name.to_upper_camel_case();
-                let ident_str = format!("{}Pk{}", table_camel, col_camel);
+                let ident_str = format!("{table_camel}Pk{col_camel}");
                 let ident = format_ident!("{}", ident_str);
                 index.insert((entity.table_name.clone(), col.name.clone()), ident);
             }
@@ -629,8 +629,7 @@ impl EntityWriter {
             // and tuple-PK arity (composite junctions) would lose its
             // `TryFromU64` bound.
             if let Some(role_index) = role_index
-                && let Some(ident) =
-                    role_index.get(&(entity.table_name.clone(), pk.name.clone()))
+                && let Some(ident) = role_index.get(&(entity.table_name.clone(), pk.name.clone()))
             {
                 // Parent alias type, e.g. `super::user::UserId`.
                 let parent_ty = column.get_rs_type(&parent_resolve_opt);
@@ -651,8 +650,7 @@ impl EntityWriter {
 
             // Own-PK alias. Render the inner type as a raw scalar so the
             // alias is `pub type CakeId = sea_orm::Id<Entity, i32>;`.
-            let Some(ident) = pk_index.get(&(entity.table_name.clone(), pk.name.clone()))
-            else {
+            let Some(ident) = pk_index.get(&(entity.table_name.clone(), pk.name.clone())) else {
                 continue;
             };
             let inner_rs = column.get_rs_type(&raw_opt);
@@ -3737,21 +3735,9 @@ mod tests {
 
         let stmt = Table::create()
             .table("widget")
-            .col(
-                ColumnDef::new("id")
-                    .integer()
-                    .not_null(),
-            )
-            .col(
-                ColumnDef::new("secondary_id")
-                    .integer()
-                    .not_null(),
-            )
-            .primary_key(
-                sea_query::Index::create()
-                    .col("id")
-                    .col("secondary_id"),
-            )
+            .col(ColumnDef::new("id").integer().not_null())
+            .col(ColumnDef::new("secondary_id").integer().not_null())
+            .primary_key(sea_query::Index::create().col("id").col("secondary_id"))
             .to_owned();
         let writer = EntityTransformer::transform(vec![stmt]).unwrap();
         let context = EntityWriterContext::new(

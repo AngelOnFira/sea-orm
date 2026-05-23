@@ -1,17 +1,16 @@
-error[E0277]: the trait bound `sea_orm::Id<user::Entity, i32>: From<sea_orm::Id<post::Entity, i32>>` is not satisfied
+error[E0277]: `sea_orm::Id<post::Entity, i32>` cannot be used as a primary-key argument for `user::Entity`
   --> tests/value_type_pk_compile_fail/wrong_id_type.rs:47:38
    |
 47 |     let _ = user::Entity::find_by_id(post::PostId::new(1));
-   |             ------------------------ ^^^^^^^^^^^^^^^^^^^^ the trait `From<sea_orm::Id<post::Entity, i32>>` is not implemented for `sea_orm::Id<user::Entity, i32>`
-   |             |
-   |             required by a bound introduced by this call
+   |                                      ^^^^^^^^^^^^^^^^^^^^ expected `user::Entity`'s `PrimaryKey::ValueType` (or something convertible to it), got `sea_orm::Id<post::Entity, i32>`
    |
-   = note: required for `sea_orm::Id<post::Entity, i32>` to implement `Into<sea_orm::Id<user::Entity, i32>>`
+   = help: the trait `FindByIdArg<user::Entity>` is not implemented for `sea_orm::Id<post::Entity, i32>`
+   = note: type-safe `Id<E, _>` wrappers deliberately do not impl `From<inner>` to prevent cross-entity ID confusion. Construct ids explicitly with `Id::new(..)` (or the per-entity alias's `::new`), and pass an id belonging to this entity.
 note: required by a bound in `find_by_id`
   --> src/entity/base_entity.rs
    |
    |     fn find_by_id<T>(values: T) -> Select<Self>
    |        ---------- required by a bound in this associated function
    |     where
-   |         T: Into<<Self::PrimaryKey as PrimaryKeyTrait>::ValueType>,
-   |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `EntityTrait::find_by_id`
+   |         T: FindByIdArg<Self>,
+   |            ^^^^^^^^^^^^^^^^^ required by this bound in `EntityTrait::find_by_id`

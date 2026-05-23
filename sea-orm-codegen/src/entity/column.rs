@@ -151,15 +151,13 @@ impl Column {
         ) {
             // Step 1: role wrapper
             if let Some(role_index) = opt.role_wrapper_index.as_deref()
-                && let Some(ident) =
-                    role_index.get(&(current_table.to_owned(), self.name.clone()))
+                && let Some(ident) = role_index.get(&(current_table.to_owned(), self.name.clone()))
             {
                 quote! { #ident }
             }
             // Step 2: FK to parent's alias
             else if let Some(first_ref) = self.refs.first() {
-                if let Some(ident) =
-                    index.get(&(first_ref.table.clone(), first_ref.column.clone()))
+                if let Some(ident) = index.get(&(first_ref.table.clone(), first_ref.column.clone()))
                 {
                     if first_ref.table == current_table {
                         // Self-referencing FK — emit local name (no super::).
@@ -176,9 +174,7 @@ impl Column {
                 }
             }
             // Step 3: own-PK alias
-            else if let Some(ident) =
-                index.get(&(current_table.to_owned(), self.name.clone()))
-            {
+            else if let Some(ident) = index.get(&(current_table.to_owned(), self.name.clone())) {
                 quote! { #ident }
             }
             // Step 4: raw scalar
