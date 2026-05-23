@@ -236,12 +236,13 @@ pub fn auto_increment_test() {
         "MyInteger(i32) newtype PK should default to auto_increment = true"
     );
 
-    // Token(String) — name ends in `String`? No (`Token` doesn't). But
-    // sea-query ignores the auto_increment flag for non-integer columns
-    // at schema-build time, so the resulting CREATE TABLE is still
-    // correct. We don't assert on `Token` because the suffix heuristic
-    // can't see through the wrapper and the test would just pin a
-    // textual coincidence rather than a meaningful contract.
+    // Token(String) — the suffix heuristic can't see through the
+    // wrapper, so the entity declares `auto_increment = false`
+    // explicitly. Verify that explicit override flows through.
+    assert!(
+        !<value_type_token_pk::PrimaryKey as PrimaryKeyTrait>::auto_increment(),
+        "Token(String) PK with explicit `auto_increment = false` should report false"
+    );
 
     // `Uuid::try_from_u64` returns Err — confirm the newtype delegates and
     // surfaces the same error variant (not a `TryFromIntError`).
