@@ -210,7 +210,9 @@ async fn find_many_to_many(db: &DbConn) -> Result<(), DbErr> {
 
     print!("find cakes for lemon: ");
 
-    let lemon = Filling::find_by_id(filling::FillingId::new(2)).one(db).await?;
+    let lemon = Filling::find_by_id(filling::FillingId::new(2))
+        .one(db)
+        .await?;
 
     if let Some(lemon) = lemon {
         let cakes: Vec<cake::Model> = lemon.find_related(Cake).all(db).await?;
