@@ -30,7 +30,7 @@ fn test_active_model_ex_blog() -> Result<(), DbErr> {
         .set_email("@1")
         .save(db)?;
 
-    assert_eq!(user.id, Unchanged(user::UserId::new(1)));
+    assert_eq!(user.id, Unchanged(user::UserId(1)));
 
     info!("save a post with an existing user");
     let post = post::ActiveModel::builder()
@@ -41,11 +41,11 @@ fn test_active_model_ex_blog() -> Result<(), DbErr> {
     assert_eq!(
         post,
         post::ActiveModelEx {
-            id: Unchanged(post::PostId::new(1)),
-            user_id: Unchanged(user::UserId::new(1)),
+            id: Unchanged(post::PostId(1)),
+            user_id: Unchanged(user::UserId(1)),
             title: Unchanged("post 1".into()),
             author: HasOneModel::set(user::ActiveModelEx {
-                id: Unchanged(user::UserId::new(1)),
+                id: Unchanged(user::UserId(1)),
                 name: Unchanged("Alice".into()),
                 email: Unchanged("@1".into()),
                 profile: HasOneModel::NotSet,
@@ -80,11 +80,11 @@ fn test_active_model_ex_blog() -> Result<(), DbErr> {
     assert_eq!(
         post,
         post::ActiveModelEx {
-            id: Unchanged(post::PostId::new(2)),
-            user_id: Unchanged(user::UserId::new(2)),
+            id: Unchanged(post::PostId(2)),
+            user_id: Unchanged(user::UserId(2)),
             title: Unchanged("post 2".into()),
             author: HasOneModel::set(user::ActiveModelEx {
-                id: Unchanged(user::UserId::new(2)),
+                id: Unchanged(user::UserId(2)),
                 name: Unchanged("Bob".into()),
                 email: Unchanged("@2".into()),
                 ..Default::default()
@@ -115,13 +115,13 @@ fn test_active_model_ex_blog() -> Result<(), DbErr> {
     assert_eq!(
         user,
         user::ActiveModelEx {
-            id: Unchanged(user::UserId::new(3)),
+            id: Unchanged(user::UserId(3)),
             name: Unchanged("Sam".into()),
             email: Unchanged("@3".into()),
             profile: HasOneModel::set(profile::ActiveModelEx {
-                id: Unchanged(profile::ProfileId::new(1)),
+                id: Unchanged(profile::ProfileId(1)),
                 picture: Unchanged("Sam.jpg".into()),
-                user_id: Unchanged(user::UserId::new(3)),
+                user_id: Unchanged(user::UserId(3)),
                 user: HasOneModel::NotSet,
             }),
             ..Default::default()
@@ -140,25 +140,25 @@ fn test_active_model_ex_blog() -> Result<(), DbErr> {
     assert_eq!(
         user,
         user::ActiveModelEx {
-            id: Unchanged(user::UserId::new(4)),
+            id: Unchanged(user::UserId(4)),
             name: Unchanged("Alan".into()),
             email: Unchanged("@4".into()),
             profile: HasOneModel::set(profile::ActiveModelEx {
-                id: Unchanged(profile::ProfileId::new(2)),
+                id: Unchanged(profile::ProfileId(2)),
                 picture: Unchanged("Alan.jpg".into()),
-                user_id: Unchanged(user::UserId::new(4)),
+                user_id: Unchanged(user::UserId(4)),
                 user: HasOneModel::NotSet,
             }),
             posts: HasManyModel::Append(vec![
                 post::ActiveModelEx {
-                    id: Unchanged(post::PostId::new(3)),
-                    user_id: Unchanged(user::UserId::new(4)),
+                    id: Unchanged(post::PostId(3)),
+                    user_id: Unchanged(user::UserId(4)),
                     title: Unchanged("post 3".into()),
                     ..Default::default()
                 },
                 post::ActiveModelEx {
-                    id: Unchanged(post::PostId::new(4)),
-                    user_id: Unchanged(user::UserId::new(4)),
+                    id: Unchanged(post::PostId(4)),
+                    user_id: Unchanged(user::UserId(4)),
                     title: Unchanged("post 4".into()),
                     ..Default::default()
                 },
@@ -170,8 +170,8 @@ fn test_active_model_ex_blog() -> Result<(), DbErr> {
 
     let posts = user.find_related(post::Entity).all(db)?;
     assert_eq!(posts.len(), 2);
-    assert_eq!(posts[0].id, post::PostId::new(3));
-    assert_eq!(posts[1].id, post::PostId::new(4));
+    assert_eq!(posts[0].id, post::PostId(3));
+    assert_eq!(posts[1].id, post::PostId(4));
 
     info!("replace posts of user: delete 3,4; insert 5 with attachment");
     user.posts = HasManyModel::Replace(vec![post::ActiveModelEx {
@@ -187,10 +187,10 @@ fn test_active_model_ex_blog() -> Result<(), DbErr> {
 
     let posts = user.find_related(post::Entity).all(db)?;
     assert_eq!(posts.len(), 1);
-    assert_eq!(posts[0].id, post::PostId::new(5));
+    assert_eq!(posts[0].id, post::PostId(5));
     let attachments = posts[0].find_related(attachment::Entity).all(db)?;
     assert_eq!(attachments.len(), 1);
-    assert_eq!(attachments[0].id, attachment::AttachmentId::new(1));
+    assert_eq!(attachments[0].id, attachment::AttachmentId(1));
     assert_eq!(attachments[0].file, "for post 5");
 
     info!("insert attachment for later use");
@@ -209,8 +209,8 @@ fn test_active_model_ex_blog() -> Result<(), DbErr> {
 
     let posts = user.find_related(post::Entity).all(db)?;
     assert_eq!(posts.len(), 2);
-    assert_eq!(posts[0].id, post::PostId::new(5));
-    assert_eq!(posts[1].id, post::PostId::new(6));
+    assert_eq!(posts[0].id, post::PostId(5));
+    assert_eq!(posts[1].id, post::PostId(6));
     let attachments = posts[1].find_related(attachment::Entity).all(db)?;
     assert_eq!(attachments.len(), 1);
     assert_eq!(attachments[0].file, "for post 6");
@@ -222,9 +222,9 @@ fn test_active_model_ex_blog() -> Result<(), DbErr> {
 
     let posts = user.find_related(post::Entity).all(db)?;
     assert_eq!(posts.len(), 2);
-    assert_eq!(posts[0].id, post::PostId::new(5));
+    assert_eq!(posts[0].id, post::PostId(5));
     assert_eq!(posts[0].title, "post 5");
-    assert_eq!(posts[1].id, post::PostId::new(6));
+    assert_eq!(posts[1].id, post::PostId(6));
     assert_eq!(posts[1].title, "post 6!");
 
     info!("update user profile and delete all posts");
@@ -235,7 +235,7 @@ fn test_active_model_ex_blog() -> Result<(), DbErr> {
 
     info!("check that user has 0 posts");
     let user = user::Entity::load()
-        .filter_by_id(user::UserId::new(4))
+        .filter_by_id(user::UserId(4))
         .with(profile::Entity)
         .with(post::Entity)
         .one(db)?
@@ -244,13 +244,13 @@ fn test_active_model_ex_blog() -> Result<(), DbErr> {
     assert_eq!(
         user,
         user::ModelEx {
-            id: user::UserId::new(4),
+            id: user::UserId(4),
             name: "Alan".into(),
             email: "@4".into(),
             profile: HasOne::loaded(profile::Model {
-                id: profile::ProfileId::new(2),
+                id: profile::ProfileId(2),
                 picture: "Alan2.jpg".into(),
-                user_id: user::UserId::new(4),
+                user_id: user::UserId(4),
             }),
             posts: HasMany::Loaded(vec![]),
             followers: HasMany::Unloaded,
@@ -259,7 +259,7 @@ fn test_active_model_ex_blog() -> Result<(), DbErr> {
     );
 
     info!("check that attachment still exists");
-    let attachment_1 = attachment::Entity::find_by_id(attachment::AttachmentId::new(1))
+    let attachment_1 = attachment::Entity::find_by_id(attachment::AttachmentId(1))
         .one(db)?
         .unwrap();
     assert_eq!(attachment_1.file, "for post 5");
@@ -303,17 +303,17 @@ fn test_active_model_ex_blog() -> Result<(), DbErr> {
     assert_eq!(
         post,
         post::ActiveModelEx {
-            id: Unchanged(post::PostId::new(7)),
-            user_id: Unchanged(user::UserId::new(4)),
+            id: Unchanged(post::PostId(7)),
+            user_id: Unchanged(user::UserId(4)),
             title: Unchanged("post 7".into()),
             author: HasOneModel::set(user::ActiveModelEx {
-                id: Unchanged(user::UserId::new(4)),
+                id: Unchanged(user::UserId(4)),
                 name: Unchanged("Alan".into()),
                 email: Unchanged("@4".into()),
                 profile: HasOneModel::set(profile::ActiveModelEx {
-                    id: Unchanged(profile::ProfileId::new(2)),
+                    id: Unchanged(profile::ProfileId(2)),
                     picture: Unchanged("Alan2.jpg".into()),
-                    user_id: Unchanged(user::UserId::new(4)),
+                    user_id: Unchanged(user::UserId(4)),
                     user: HasOneModel::NotSet,
                 }),
                 posts: HasManyModel::Append(vec![]),
@@ -324,12 +324,12 @@ fn test_active_model_ex_blog() -> Result<(), DbErr> {
             attachments: HasManyModel::NotSet,
             tags: HasManyModel::Append(vec![
                 tag::ActiveModel {
-                    id: Unchanged(tag::TagId::new(1)),
+                    id: Unchanged(tag::TagId(1)),
                     tag: Unchanged("day".into()),
                 }
                 .into(),
                 tag::ActiveModel {
-                    id: Unchanged(tag::TagId::new(2)),
+                    id: Unchanged(tag::TagId(2)),
                     tag: Unchanged("pet".into()),
                 }
                 .into(),
@@ -346,12 +346,12 @@ fn test_active_model_ex_blog() -> Result<(), DbErr> {
 
     info!("get back the post and tags");
     let post_7 = post::Entity::load()
-        .filter_by_id(post::PostId::new(7))
+        .filter_by_id(post::PostId(7))
         .with(tag::Entity)
         .one(db)?
         .unwrap();
 
-    assert_eq!(post_7.id, post::PostId::new(7));
+    assert_eq!(post_7.id, post::PostId(7));
     assert_eq!(post_7.tags.len(), 2);
     assert_eq!(post_7.tags[0].tag, "day");
     assert_eq!(post_7.tags[1].tag, "pet");
@@ -366,7 +366,7 @@ fn test_active_model_ex_blog() -> Result<(), DbErr> {
 
     info!("get back the post and attachment");
     let post_7 = post::Entity::load()
-        .filter_by_id(post::PostId::new(7))
+        .filter_by_id(post::PostId(7))
         .with(attachment::Entity)
         .one(db)?
         .unwrap();
@@ -383,7 +383,7 @@ fn test_active_model_ex_blog() -> Result<(), DbErr> {
         .picture = Set("Alan3.jpg".into());
     let mut post = post.save(db)?;
     assert_eq!(
-        profile::Entity::find_by_id(profile::ProfileId::new(2))
+        profile::Entity::find_by_id(profile::ProfileId(2))
             .one(db)?
             .unwrap()
             .picture,
@@ -398,7 +398,7 @@ fn test_active_model_ex_blog() -> Result<(), DbErr> {
         }
         .into(),
         tag::ActiveModel {
-            id: Unchanged(tag::TagId::new(2)), // retain
+            id: Unchanged(tag::TagId(2)), // retain
             tag: Unchanged("pet".into()),
         }
         .into(),
@@ -407,12 +407,12 @@ fn test_active_model_ex_blog() -> Result<(), DbErr> {
 
     info!("get back the post and tags");
     let post_7 = post::Entity::load()
-        .filter_by_id(post::PostId::new(7))
+        .filter_by_id(post::PostId(7))
         .with(tag::Entity)
         .one(db)?
         .unwrap();
 
-    assert_eq!(post_7.id, post::PostId::new(7));
+    assert_eq!(post_7.id, post::PostId(7));
     assert_eq!(post_7.tags.len(), 2);
     assert_eq!(post_7.tags[0].tag, "pet");
     assert_eq!(post_7.tags[1].tag, "food");
@@ -430,12 +430,12 @@ fn test_active_model_ex_blog() -> Result<(), DbErr> {
 
     info!("get back the post and tags");
     let post_7 = post::Entity::load()
-        .filter_by_id(post::PostId::new(7))
+        .filter_by_id(post::PostId(7))
         .with(tag::Entity)
         .one(db)?
         .unwrap();
 
-    assert_eq!(post_7.id, post::PostId::new(7));
+    assert_eq!(post_7.id, post::PostId(7));
     assert_eq!(post_7.title, "post 7!");
     assert_eq!(post_7.tags.len(), 3);
     assert_eq!(post_7.tags[0].tag, "pet");
@@ -455,15 +455,9 @@ fn test_active_model_ex_blog() -> Result<(), DbErr> {
     assert!(user::Entity::find_by_email("@2").one(db)?.is_none());
 
     info!("cascade delete user 4");
-    let user_4 = user::Entity::find_by_id(user::UserId::new(4))
-        .one(db)?
-        .unwrap();
+    let user_4 = user::Entity::find_by_id(user::UserId(4)).one(db)?.unwrap();
     assert_eq!(user_4.cascade_delete(db)?.rows_affected, 1 + 1 + 3 + 1); // user + profile + post_tag + post
-    assert!(
-        user::Entity::find_by_id(user::UserId::new(4))
-            .one(db)?
-            .is_none()
-    );
+    assert!(user::Entity::find_by_id(user::UserId(4)).one(db)?.is_none());
 
     info!("insert a new user with a new profile and new post with tag");
     let user = user::ActiveModel::builder()
@@ -486,23 +480,23 @@ fn test_active_model_ex_blog() -> Result<(), DbErr> {
             .one(db)?
             .unwrap(),
         user::ModelEx {
-            id: user::UserId::new(5),
+            id: user::UserId(5),
             name: "Bob".into(),
             email: "bob@sea-ql.org".into(),
             profile: HasOne::loaded(profile::Model {
-                id: profile::ProfileId::new(3),
+                id: profile::ProfileId(3),
                 picture: "image.jpg".into(),
-                user_id: user::UserId::new(5),
+                user_id: user::UserId(5),
             }),
             posts: HasMany::Loaded(vec![post::ModelEx {
-                id: post::PostId::new(8),
-                user_id: user::UserId::new(5),
+                id: post::PostId(8),
+                user_id: user::UserId(5),
                 title: "Nice weather".into(),
                 author: HasOne::Unloaded,
                 attachments: HasMany::Unloaded,
                 comments: HasMany::Unloaded,
                 tags: HasMany::Loaded(vec![tag::ModelEx {
-                    id: tag::TagId::new(5),
+                    id: tag::TagId(5),
                     tag: "sunny".into(),
                     posts: HasMany::Unloaded,
                 }]),
