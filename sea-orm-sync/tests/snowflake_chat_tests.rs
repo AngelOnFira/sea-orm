@@ -86,11 +86,12 @@ fn snowflake_chat_end_to_end() -> Result<(), sea_orm::DbErr> {
     }
     .insert(db)?;
 
-    // Self-ref + multi-FK to user. Author and mention go through their
-    // role wrappers so a swap doesn't compile.
+    // Self-ref + multi-FK to user. Author and mention share the parent
+    // UserId type (codegen doesn't role-wrap non-PK FK columns), but
+    // the surrounding signatures still reject GuildId / ChannelId.
     let first = message::ActiveModel {
         channel_id: Set(general.id),
-        author_id: Set(message::MessageAuthorId(alice_id)),
+        author_id: Set(alice_id),
         mention_user_id: Set(None),
         reply_to_message_id: Set(None),
         content: Set("hello world".to_string()),
@@ -100,8 +101,8 @@ fn snowflake_chat_end_to_end() -> Result<(), sea_orm::DbErr> {
 
     let reply = message::ActiveModel {
         channel_id: Set(general.id),
-        author_id: Set(message::MessageAuthorId(bob_id)),
-        mention_user_id: Set(Some(message::MessageMentionUserId(alice_id))),
+        author_id: Set(bob_id),
+        mention_user_id: Set(Some(alice_id)),
         reply_to_message_id: Set(Some(first.id)),
         content: Set("hi alice".to_string()),
         ..Default::default()
@@ -122,16 +123,17 @@ fn snowflake_chat_end_to_end() -> Result<(), sea_orm::DbErr> {
         .expect("composite-PK lookup");
     assert_eq!(fetched_member.nickname.as_deref(), Some("Chef Alice"));
 
-    // DM thread: pure role-wrapper case. Each participant column is its
-    // own newtype, so accidentally writing the same wrapper for both
-    // slots wouldn't compile.
+    // DM thread: both participants share `UserId`. The function-level
+    // safety contract for "this argument is participant A, not B" lives
+    // in domain code (see `operations::send_message` for the canonical
+    // pattern). Inserting directly here passes typed user IDs through.
     let dm = dm_thread::ActiveModel {
-        participant_a: Set(dm_thread::DmThreadParticipantA(alice_id)),
-        participant_b: Set(dm_thread::DmThreadParticipantB(bob_id)),
+        participant_a: Set(alice_id),
+        participant_b: Set(bob_id),
         ..Default::default()
     }
     .insert(db)?;
-    assert_eq!(dm.participant_a.0, alice_id);
+    assert_eq!(dm.participant_a, alice_id);
 
     // Reaction: three-column composite PK with two typed components.
     reaction::ActiveModel {
@@ -179,6 +181,30 @@ fn snowflake_chat_end_to_end() -> Result<(), sea_orm::DbErr> {
             .one(db)?
             .is_none()
     );
+
+    // Exercise typed-PK domain code from `snowflake_chat::operations`.
+    // These function signatures take typed `ChannelId` / `UserId` /
+    // `GuildId` / `MessageId` arguments, so swapping the wrong id type
+    // at any call site is a compile error. The compile-fail trybuild
+    // fixtures cover the rejection contract; these call sites cover
+    // the positive side — they only type-check because the IDs being
+    // passed around match the parameter types.
+    use common::snowflake_chat::operations;
+
+    let sent =
+        operations::send_message(db, general.id, alice_id, "hello via operations".to_string())?;
+    assert_eq!(sent.author_id, alice_id);
+
+    let author = operations::find_message_author(db, sent.id)?
+        .expect("inserted message must have an author");
+    assert_eq!(author, alice_id);
+
+    let listed_replies = operations::list_replies_to(db, first.id)?;
+    assert_eq!(listed_replies.len(), 1);
+
+    // Composite delete via typed components in the correct positional order.
+    let ban_res = operations::ban_user_from_guild(db, guild_id, alice_id)?;
+    assert_eq!(ban_res.rows_affected, 1);
 
     Ok(())
 }

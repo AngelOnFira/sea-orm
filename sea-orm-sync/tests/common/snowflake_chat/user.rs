@@ -1,7 +1,6 @@
 use sea_orm::entity::prelude::*;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, DeriveValueType)]
-pub struct UserId(pub i64);
+pub type UserId = sea_orm::Id<Entity, i64>;
 
 #[sea_orm::model]
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]

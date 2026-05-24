@@ -1,7 +1,11 @@
+//! Shape mirrors what `sea-orm-cli generate --with-pk-newtypes` produces
+//! for a table named `snowflake_guild` with an `i64` PK.
+//! See the `pk_newtypes_snowflake_chat_shape` codegen test in
+//! `sea-orm-codegen/src/entity/writer.rs` for the contract.
+
 use sea_orm::entity::prelude::*;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, DeriveValueType)]
-pub struct GuildId(pub i64);
+pub type GuildId = sea_orm::Id<Entity, i64>;
 
 #[sea_orm::model]
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
