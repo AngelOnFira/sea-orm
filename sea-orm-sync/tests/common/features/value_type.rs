@@ -55,10 +55,8 @@ pub mod value_type_pk {
     impl ActiveModelBehavior for ActiveModel {}
 }
 
-/// Token-typed (String) newtype primary key — exercises the delegating
-/// `TryFromU64` impl (`String::try_from_u64` returns `Ok(n.to_string())`)
-/// and the `PkAutoIncrementHint` propagation through `DeriveValueType`
-/// (resolves to `false` via the inner `String`).
+/// String-backed newtype PK — exercises `PkAutoIncrementHint` resolving
+/// through `DeriveValueType` to `false`.
 pub mod value_type_token_pk {
     use super::*;
     use sea_orm::entity::prelude::*;

@@ -242,9 +242,13 @@ pub fn expand_derive_entity_model(
                                         );
                                     }
                                 } else if meta.path.is_ident("auto_increment") {
-                                    // Accept both forms:
+                                    // Accept two attribute forms:
                                     //   #[sea_orm(primary_key, auto_increment = false)]
-                                    //   #[sea_orm(primary_key, auto_increment)]   (bare = true)
+                                    //   #[sea_orm(primary_key, auto_increment)]
+                                    // The second is shorthand for `auto_increment = true`;
+                                    // the `if let Lit::Bool ... else` branches below handle
+                                    // the explicit `= <bool>` case, and the outer `else`
+                                    // handles the bare form.
                                     if meta.input.peek(syn::Token![=]) {
                                         let lit = meta.value()?.parse()?;
                                         if let Lit::Bool(litbool) = lit {

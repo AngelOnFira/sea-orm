@@ -3791,4 +3791,280 @@ mod tests {
             file.content
         );
     }
+
+    /// End-to-end codegen check on a snowflake-chat-shaped schema. Exercises
+    /// the harder cases that the simple two-table test above doesn't reach:
+    ///
+    /// - `message.reply_to_message_id` is a self-referencing nullable FK —
+    ///   should emit `Option<MessageId>` (local alias, no `super::` path).
+    /// - `message` has two non-PK FK columns pointing at `user.id`
+    ///   (`author_id`, `mention_user_id`) — neither gets a role wrapper
+    ///   (role wrappers are PK-only by design); both resolve to the parent
+    ///   `super::user::UserId` alias.
+    /// - `member` has a composite PK whose components are themselves typed
+    ///   PK references (`guild_id` -> `GuildId`, `user_id` -> `UserId`).
+    ///   All-FK composite PKs emit no local aliases; each column resolves
+    ///   to the parent alias.
+    /// - `user_follower` is a junction with TWO PK columns both FK-
+    ///   referencing `user.id` — this is the role-wrapper case
+    ///   (`UserFollowerPkUserId`, `UserFollowerPkFollowerId`).
+    ///
+    /// Mirrors `tests/common/snowflake_chat/` but without the `snowflake_`
+    /// table-name prefix so the generated alias names match the hand-written
+    /// domain types (`UserId` rather than `SnowflakeUserId`).
+    #[test]
+    fn pk_newtypes_snowflake_chat_shape() {
+        use crate::EntityTransformer;
+        use sea_query::{ColumnDef, ForeignKey, Table};
+
+        let guild = Table::create()
+            .table("guild")
+            .col(
+                ColumnDef::new("id")
+                    .big_integer()
+                    .not_null()
+                    .auto_increment()
+                    .primary_key(),
+            )
+            .col(ColumnDef::new("name").string().not_null())
+            .to_owned();
+
+        let user = Table::create()
+            .table("user")
+            .col(
+                ColumnDef::new("id")
+                    .big_integer()
+                    .not_null()
+                    .auto_increment()
+                    .primary_key(),
+            )
+            .col(ColumnDef::new("username").string().not_null())
+            .to_owned();
+
+        let channel = Table::create()
+            .table("channel")
+            .col(
+                ColumnDef::new("id")
+                    .big_integer()
+                    .not_null()
+                    .auto_increment()
+                    .primary_key(),
+            )
+            .col(ColumnDef::new("guild_id").big_integer().not_null())
+            .col(ColumnDef::new("name").string().not_null())
+            .foreign_key(
+                ForeignKey::create()
+                    .name("fk-channel-guild")
+                    .from("channel", "guild_id")
+                    .to("guild", "id"),
+            )
+            .to_owned();
+
+        // Composite PK: (guild_id, user_id), both FK-referenced.
+        let member = Table::create()
+            .table("member")
+            .col(ColumnDef::new("guild_id").big_integer().not_null())
+            .col(ColumnDef::new("user_id").big_integer().not_null())
+            .col(ColumnDef::new("nickname").string())
+            .primary_key(
+                sea_query::Index::create()
+                    .col("guild_id")
+                    .col("user_id"),
+            )
+            .foreign_key(
+                ForeignKey::create()
+                    .name("fk-member-guild")
+                    .from("member", "guild_id")
+                    .to("guild", "id"),
+            )
+            .foreign_key(
+                ForeignKey::create()
+                    .name("fk-member-user")
+                    .from("member", "user_id")
+                    .to("user", "id"),
+            )
+            .to_owned();
+
+        // Multi-FK-to-user (author + mention) + self-ref (reply_to_message_id).
+        let message = Table::create()
+            .table("message")
+            .col(
+                ColumnDef::new("id")
+                    .big_integer()
+                    .not_null()
+                    .auto_increment()
+                    .primary_key(),
+            )
+            .col(ColumnDef::new("channel_id").big_integer().not_null())
+            .col(ColumnDef::new("author_id").big_integer().not_null())
+            .col(ColumnDef::new("mention_user_id").big_integer())
+            .col(ColumnDef::new("reply_to_message_id").big_integer())
+            .col(ColumnDef::new("content").string().not_null())
+            .foreign_key(
+                ForeignKey::create()
+                    .name("fk-message-channel")
+                    .from("message", "channel_id")
+                    .to("channel", "id"),
+            )
+            .foreign_key(
+                ForeignKey::create()
+                    .name("fk-message-author")
+                    .from("message", "author_id")
+                    .to("user", "id"),
+            )
+            .foreign_key(
+                ForeignKey::create()
+                    .name("fk-message-mention")
+                    .from("message", "mention_user_id")
+                    .to("user", "id"),
+            )
+            .foreign_key(
+                ForeignKey::create()
+                    .name("fk-message-reply")
+                    .from("message", "reply_to_message_id")
+                    .to("message", "id"),
+            )
+            .to_owned();
+
+        // Junction table with two PK columns both FK-referencing user.id.
+        // This is the role-wrapper trigger.
+        let user_follower = Table::create()
+            .table("user_follower")
+            .col(ColumnDef::new("user_id").big_integer().not_null())
+            .col(ColumnDef::new("follower_id").big_integer().not_null())
+            .primary_key(
+                sea_query::Index::create()
+                    .col("user_id")
+                    .col("follower_id"),
+            )
+            .foreign_key(
+                ForeignKey::create()
+                    .name("fk-uf-user")
+                    .from("user_follower", "user_id")
+                    .to("user", "id"),
+            )
+            .foreign_key(
+                ForeignKey::create()
+                    .name("fk-uf-follower")
+                    .from("user_follower", "follower_id")
+                    .to("user", "id"),
+            )
+            .to_owned();
+
+        let writer = EntityTransformer::transform(vec![
+            guild,
+            user,
+            channel,
+            member,
+            message,
+            user_follower,
+        ])
+        .unwrap();
+        let context = EntityWriterContext::new(
+            EntityFormat::Compact,
+            WithPrelude::None,
+            WithSerde::None,
+            false,
+            DateTimeCrate::Chrono,
+            BigIntegerType::I64,
+            None,
+            false,
+            false,
+            false,
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            false,
+            true,
+            BannerVersion::Off,
+            PkNewtypeFormat::Inline,
+        );
+        let output = writer.generate(&context);
+        let by_name = |n: &str| -> String {
+            output
+                .files
+                .iter()
+                .find(|f| f.name == n)
+                .unwrap_or_else(|| panic!("missing {n}"))
+                .content
+                .split_whitespace()
+                .collect::<String>()
+        };
+
+        // Simple aliases on the parent entities.
+        let guild = by_name("guild.rs");
+        assert!(
+            guild.contains("pubtypeGuildId=sea_orm::Id<Entity,i64>"),
+            "guild.rs missing GuildId alias: {guild}"
+        );
+        let user = by_name("user.rs");
+        assert!(
+            user.contains("pubtypeUserId=sea_orm::Id<Entity,i64>"),
+            "user.rs missing UserId alias: {user}"
+        );
+
+        // Channel: FK column threaded to the parent alias.
+        let channel = by_name("channel.rs");
+        assert!(
+            channel.contains("pubguild_id:super::guild::GuildId"),
+            "channel.rs FK should resolve to super::guild::GuildId: {channel}"
+        );
+
+        // Composite PK on member: both columns are FKs to other entities'
+        // PKs, so no local aliases are emitted — each column resolves
+        // directly to the parent's typed alias.
+        let member = by_name("member.rs");
+        assert!(
+            member.contains("pubguild_id:super::guild::GuildId"),
+            "member.rs guild_id should resolve to super::guild::GuildId: {member}"
+        );
+        assert!(
+            member.contains("pubuser_id:super::user::UserId"),
+            "member.rs user_id should resolve to super::user::UserId: {member}"
+        );
+
+        // Message: non-PK FK columns to user.id resolve directly to the
+        // parent alias (role wrappers are PK-only). Self-ref reply column
+        // resolves to the local alias as `Option<MessageId>`.
+        let message = by_name("message.rs");
+        assert!(
+            message.contains("pubauthor_id:super::user::UserId"),
+            "message.rs author_id should resolve to super::user::UserId: {message}"
+        );
+        assert!(
+            message.contains("pubmention_user_id:Option<super::user::UserId>"),
+            "message.rs mention_user_id should be Option<super::user::UserId>: {message}"
+        );
+        assert!(
+            message.contains("Option<MessageId>"),
+            "message.rs reply_to_message_id should resolve to Option<MessageId> (local): {message}"
+        );
+        assert!(
+            !message.contains("super::message::MessageId"),
+            "self-ref FK should not use the super:: path: {message}"
+        );
+
+        // user_follower junction: both PK columns are FKs to user.id, so
+        // role wrappers fire and both columns are typed as the local
+        // wrapper structs around super::user::UserId.
+        let uf = by_name("user_follower.rs");
+        assert!(
+            uf.contains("structUserFollowerPkUserId(pubsuper::user::UserId)"),
+            "user_follower.rs missing UserFollowerPkUserId wrapper struct: {uf}"
+        );
+        assert!(
+            uf.contains("structUserFollowerPkFollowerId(pubsuper::user::UserId)"),
+            "user_follower.rs missing UserFollowerPkFollowerId wrapper struct: {uf}"
+        );
+        assert!(
+            uf.contains("pubuser_id:UserFollowerPkUserId"),
+            "user_follower.rs user_id should be typed as UserFollowerPkUserId: {uf}"
+        );
+        assert!(
+            uf.contains("pubfollower_id:UserFollowerPkFollowerId"),
+            "user_follower.rs follower_id should be typed as UserFollowerPkFollowerId: {uf}"
+        );
+    }
 }
