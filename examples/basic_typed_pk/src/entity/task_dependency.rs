@@ -4,39 +4,39 @@ use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, DeriveValueType)]
 #[sea_orm(try_from_u64)]
-pub struct UserFollowerPkUserId(pub super::user::UserId);
+pub struct TaskDependencyPkBlockerTaskId(pub super::task::TaskId);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, DeriveValueType)]
 #[sea_orm(try_from_u64)]
-pub struct UserFollowerPkFollowerId(pub super::user::UserId);
+pub struct TaskDependencyPkBlockedTaskId(pub super::task::TaskId);
 
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
-#[sea_orm(table_name = "user_follower")]
+#[sea_orm(table_name = "task_dependency")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
-    pub user_id: UserFollowerPkUserId,
+    pub blocker_task_id: TaskDependencyPkBlockerTaskId,
     #[sea_orm(primary_key, auto_increment = false)]
-    pub follower_id: UserFollowerPkFollowerId,
+    pub blocked_task_id: TaskDependencyPkBlockedTaskId,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
     #[sea_orm(
-        belongs_to = "super::user::Entity",
-        from = "Column::FollowerId",
-        to = "super::user::Column::Id",
+        belongs_to = "super::task::Entity",
+        from = "Column::BlockedTaskId",
+        to = "super::task::Column::Id",
         on_update = "NoAction",
         on_delete = "NoAction"
     )]
-    User2,
+    Task2,
     #[sea_orm(
-        belongs_to = "super::user::Entity",
-        from = "Column::UserId",
-        to = "super::user::Column::Id",
+        belongs_to = "super::task::Entity",
+        from = "Column::BlockerTaskId",
+        to = "super::task::Column::Id",
         on_update = "NoAction",
         on_delete = "NoAction"
     )]
-    User1,
+    Task1,
 }
 
 impl ActiveModelBehavior for ActiveModel {}

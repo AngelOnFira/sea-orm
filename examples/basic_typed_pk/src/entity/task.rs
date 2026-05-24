@@ -2,44 +2,41 @@
 
 use sea_orm::entity::prelude::*;
 
-pub type MessageId = sea_orm::Id<Entity, i64>;
+pub type TaskId = sea_orm::Id<Entity, i64>;
 
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
-#[sea_orm(table_name = "message")]
+#[sea_orm(table_name = "task")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment)]
-    pub id: MessageId,
-    pub channel_id: super::channel::ChannelId,
-    pub author_id: super::user::UserId,
-    pub mention_user_id: Option<super::user::UserId>,
-    pub reply_to_message_id: Option<MessageId>,
-    #[sea_orm(column_type = "Text")]
-    pub content: String,
+    pub id: TaskId,
+    pub project_id: super::project::ProjectId,
+    pub assignee_id: super::user::UserId,
+    pub reviewer_id: Option<super::user::UserId>,
+    pub parent_task_id: Option<TaskId>,
+    pub title: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
     #[sea_orm(
-        belongs_to = "super::channel::Entity",
-        from = "Column::ChannelId",
-        to = "super::channel::Column::Id",
+        belongs_to = "super::project::Entity",
+        from = "Column::ProjectId",
+        to = "super::project::Column::Id",
         on_update = "NoAction",
         on_delete = "NoAction"
     )]
-    Channel,
+    Project,
     #[sea_orm(
         belongs_to = "Entity",
-        from = "Column::ReplyToMessageId",
+        from = "Column::ParentTaskId",
         to = "Column::Id",
         on_update = "NoAction",
         on_delete = "NoAction"
     )]
     SelfRef,
-    #[sea_orm(has_many = "super::reaction::Entity")]
-    Reaction,
     #[sea_orm(
         belongs_to = "super::user::Entity",
-        from = "Column::MentionUserId",
+        from = "Column::ReviewerId",
         to = "super::user::Column::Id",
         on_update = "NoAction",
         on_delete = "NoAction"
@@ -47,7 +44,7 @@ pub enum Relation {
     User2,
     #[sea_orm(
         belongs_to = "super::user::Entity",
-        from = "Column::AuthorId",
+        from = "Column::AssigneeId",
         to = "super::user::Column::Id",
         on_update = "NoAction",
         on_delete = "NoAction"
@@ -55,15 +52,9 @@ pub enum Relation {
     User1,
 }
 
-impl Related<super::channel::Entity> for Entity {
+impl Related<super::project::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::Channel.def()
-    }
-}
-
-impl Related<super::reaction::Entity> for Entity {
-    fn to() -> RelationDef {
-        Relation::Reaction.def()
+        Relation::Project.def()
     }
 }
 

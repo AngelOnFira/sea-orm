@@ -9,36 +9,29 @@ pub type UserId = sea_orm::Id<Entity, i64>;
 pub struct Model {
     #[sea_orm(primary_key, auto_increment)]
     pub id: UserId,
+    pub name: String,
     #[sea_orm(unique)]
-    pub username: String,
+    pub email: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
-    #[sea_orm(has_many = "super::member::Entity")]
-    Member,
-    #[sea_orm(has_many = "super::reaction::Entity")]
-    Reaction,
+    #[sea_orm(has_many = "super::project_member::Entity")]
+    ProjectMember,
 }
 
-impl Related<super::member::Entity> for Entity {
+impl Related<super::project_member::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::Member.def()
+        Relation::ProjectMember.def()
     }
 }
 
-impl Related<super::reaction::Entity> for Entity {
+impl Related<super::project::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::Reaction.def()
-    }
-}
-
-impl Related<super::guild::Entity> for Entity {
-    fn to() -> RelationDef {
-        super::member::Relation::Guild.def()
+        super::project_member::Relation::Project.def()
     }
     fn via() -> Option<RelationDef> {
-        Some(super::member::Relation::User.def().rev())
+        Some(super::project_member::Relation::User.def().rev())
     }
 }
 

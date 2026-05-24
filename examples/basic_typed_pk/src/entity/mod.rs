@@ -2,10 +2,8 @@
 
 pub mod prelude;
 
-pub mod channel;
-pub mod guild;
-pub mod member;
-pub mod message;
-pub mod reaction;
+pub mod project;
+pub mod project_member;
+pub mod task;
+pub mod task_dependency;
 pub mod user;
-pub mod user_follower;

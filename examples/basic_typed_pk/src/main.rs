@@ -1,28 +1,22 @@
-//! Typed-PK chat example.
+//! Typed-PK task tracker example.
 //!
 //! Everything under `src/entity/` was produced by
 //! `sea-orm-cli generate entity --with-pk-newtypes` against
-//! `chat.sql`. The shape of those files — `pub type FooId =
+//! `tasks.sql`. The shape of those files — `pub type FooId =
 //! sea_orm::Id<Entity, i64>;` aliases, role wrappers on the
-//! `user_follower` junction, FK columns typed as parent aliases — is
-//! exactly what codegen emits today. This example exercises that
+//! `task_dependency` junction, FK columns typed as parent aliases —
+//! is exactly what codegen emits today. This example exercises that
 //! generated code end-to-end against in-memory SQLite.
 //!
-//! Regenerate with:
-//!
-//!     sqlite3 /tmp/typed_pk_chat.db < examples/basic_typed_pk/chat.sql
-//!     sea-orm-cli generate entity \
-//!         --database-url sqlite:///tmp/typed_pk_chat.db \
-//!         --with-pk-newtypes \
-//!         --output-dir examples/basic_typed_pk/src/entity
+//! See `Readme.md` for the regeneration command.
 
 mod entity;
 mod operations;
 
-use entity::{channel, guild, message, user, user_follower};
+use entity::{project, project_member, task, user};
 use sea_orm::{
     ActiveModelTrait, ActiveValue::*, ConnectOptions, ConnectionTrait, Database, DbBackend, DbErr,
-    Schema, Statement,
+    EntityTrait, Schema, Statement,
 };
 
 #[tokio::main]
@@ -30,78 +24,103 @@ async fn main() -> Result<(), DbErr> {
     let db = Database::connect(ConnectOptions::new("sqlite::memory:")).await?;
     create_schema(&db).await?;
 
-    // Insert two users and one guild. PKs are typed `UserId` / `GuildId`
-    // straight out of `.insert(...)` — no raw `i64` ever appears here.
+    // Create two users. `.insert(...)` returns the persisted Model with
+    // a typed `UserId` already populated — no raw `i64` ever appears.
     let alice = user::ActiveModel {
-        username: Set("alice".to_string()),
+        name: Set("Alice".to_string()),
+        email: Set("alice@example.com".to_string()),
         ..Default::default()
     }
     .insert(&db)
     .await?;
     let bob = user::ActiveModel {
-        username: Set("bob".to_string()),
-        ..Default::default()
-    }
-    .insert(&db)
-    .await?;
-    let guild_a = guild::ActiveModel {
-        name: Set("Cooks United".to_string()),
-        ..Default::default()
-    }
-    .insert(&db)
-    .await?;
-    let general = channel::ActiveModel {
-        guild_id: Set(guild_a.id),
-        name: Set("general".to_string()),
+        name: Set("Bob".to_string()),
+        email: Set("bob@example.com".to_string()),
         ..Default::default()
     }
     .insert(&db)
     .await?;
 
-    // Send two messages via the typed domain layer. `send_message` only
-    // accepts `ChannelId` + `UserId`; passing a `GuildId` is a compile error.
-    let first = operations::send_message(&db, general.id, alice.id, "hello world".to_string()).await?;
-    let reply = operations::send_message_with_mention(
-        &db,
-        general.id,
-        bob.id,
-        alice.id,
-        Some(first.id),
-        "hi alice".to_string(),
-    )
+    // Project + membership. `add_project_member` takes
+    // `(ProjectId, UserId, String)` — swapping the two id args would be
+    // a compile error.
+    let audit = project::ActiveModel {
+        name: Set("ATO compliance audit".to_string()),
+        ..Default::default()
+    }
+    .insert(&db)
     .await?;
+    operations::add_project_member(&db, audit.id, alice.id, "Admin".to_string()).await?;
+    operations::add_project_member(&db, audit.id, bob.id, "Engineer".to_string()).await?;
 
-    println!("first message: {first:?}");
-    println!("reply: {reply:?}");
-
-    // Composite-PK lookup: each component is its own typed alias.
-    operations::add_member(&db, guild_a.id, alice.id, Some("Chef Alice".to_string())).await?;
-    operations::add_member(&db, guild_a.id, bob.id, None).await?;
-    let alice_member = operations::find_member(&db, guild_a.id, alice.id)
+    // Composite-PK lookup inline: `find_by_id` takes a tuple of typed
+    // components. Reversing them is a compile error.
+    let alice_membership = project_member::Entity::find_by_id((audit.id, alice.id))
+        .one(&db)
         .await?
         .expect("alice should be a member");
-    println!("alice's member row: {alice_member:?}");
+    println!("alice's membership row: {alice_membership:?}");
 
-    // Role-wrapped junction insert. The two PK columns are distinct types
-    // (`UserFollowerPkUserId`, `UserFollowerPkFollowerId`), so swapping
-    // arguments at this call site would be a compile error.
-    user_follower::ActiveModel {
-        user_id: Set(user_follower::UserFollowerPkUserId(alice.id)),
-        follower_id: Set(user_follower::UserFollowerPkFollowerId(bob.id)),
+    // Tasks. Each parameter to the typed insert is a distinct PK type;
+    // a mixup would be rejected at compile time.
+    let draft_policy = task::ActiveModel {
+        project_id: Set(audit.id),
+        assignee_id: Set(bob.id),
+        reviewer_id: Set(Some(alice.id)),
+        parent_task_id: Set(None),
+        title: Set("Draft policy".to_string()),
+        ..Default::default()
+    }
+    .insert(&db)
+    .await?;
+    println!("draft policy: {draft_policy:?}");
+
+    // Subtask via self-ref. `parent_task_id: Set(Some(parent))` carries
+    // a typed `TaskId` — there's no way to accidentally pass a UserId.
+    let outline =
+        operations::create_subtask(&db, audit.id, draft_policy.id, bob.id, "Outline".to_string())
+            .await?;
+    println!("outline (subtask of draft policy): {outline:?}");
+
+    let internal_review = task::ActiveModel {
+        project_id: Set(audit.id),
+        assignee_id: Set(alice.id),
+        reviewer_id: Set(None),
+        parent_task_id: Set(None),
+        title: Set("Internal review".to_string()),
+        ..Default::default()
     }
     .insert(&db)
     .await?;
 
-    // Reply chain via self-ref.
-    let replies = operations::list_replies_to(&db, first.id).await?;
-    println!("{} reply/replies to first message:", replies.len());
-    for r in &replies {
-        println!("  {r:?}");
+    // Role-wrapped junction. Inside `add_blocker`, the two typed args
+    // are funneled through `TaskDependencyPkBlockerTaskId` and
+    // `TaskDependencyPkBlockedTaskId` — swapping the bodies would be
+    // a compile error at the insert site.
+    operations::add_blocker(&db, draft_policy.id, internal_review.id).await?;
+    println!("blocker recorded: \"draft policy\" blocks \"internal review\"");
+
+    // Reassign outline from bob to alice. Typed PK threaded through UPDATE.
+    let outline = operations::reassign_task(&db, outline.id, alice.id).await?;
+    println!("outline reassigned to alice: {outline:?}");
+
+    // Typed PK in `.filter()` position — a different code path than
+    // `find_by_id`.
+    let bobs_tasks = operations::tasks_assigned_to(&db, bob.id).await?;
+    println!("tasks assigned to bob ({} total):", bobs_tasks.len());
+    for t in &bobs_tasks {
+        println!("  {t:?}");
     }
 
-    // Composite-PK delete (ban a user from a guild).
-    let res = operations::ban_user_from_guild(&db, guild_a.id, alice.id).await?;
-    println!("banned alice from guild: {} row(s) affected", res.rows_affected);
+    // Composite-PK delete inline. Reversing the tuple components is a
+    // compile error because `ProjectId` and `UserId` are distinct types.
+    let removed = project_member::Entity::delete_by_id((audit.id, bob.id))
+        .exec(&db)
+        .await?;
+    println!(
+        "bob removed from project: {} row(s) affected",
+        removed.rows_affected
+    );
 
     Ok(())
 }
@@ -115,13 +134,11 @@ async fn create_schema(db: &impl ConnectionTrait) -> Result<(), DbErr> {
 
     // Order matters: parents before children so FKs resolve.
     for stmt in [
-        schema.create_table_from_entity(guild::Entity),
         schema.create_table_from_entity(user::Entity),
-        schema.create_table_from_entity(channel::Entity),
-        schema.create_table_from_entity(entity::member::Entity),
-        schema.create_table_from_entity(message::Entity),
-        schema.create_table_from_entity(entity::reaction::Entity),
-        schema.create_table_from_entity(user_follower::Entity),
+        schema.create_table_from_entity(project::Entity),
+        schema.create_table_from_entity(project_member::Entity),
+        schema.create_table_from_entity(task::Entity),
+        schema.create_table_from_entity(entity::task_dependency::Entity),
     ] {
         db.execute(&stmt).await?;
     }

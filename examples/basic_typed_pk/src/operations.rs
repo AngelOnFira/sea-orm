@@ -1,95 +1,92 @@
-//! Realistic typed-PK domain code over the generated entities.
+//! Typed-PK domain code over the generated task-tracker entities.
 //!
 //! Every function signature carries typed IDs, so the compiler catches
-//! mixups at every call site — passing a `GuildId` where a `UserId` is
-//! expected, swapping `(GuildId, UserId)` to `(UserId, GuildId)`, etc.
-//! The trybuild fixtures under `tests/value_type_pk_compile_fail/`
-//! pin the rejection contract; this module is the positive side.
+//! mixups at every call site. The trybuild fixtures under
+//! `tests/value_type_pk_compile_fail/` pin the rejection contract;
+//! this module is the positive side.
 //!
-//! `send_message_with_mention` deliberately threads four typed
-//! parameters in a row (`ChannelId`, two `UserId`s, `MessageId`) — the
-//! kind of API where the type system actually earns its keep.
+//! Each function covers a distinct typed-PK call shape:
+//!
+//!   - `reassign_task` — typed PK threaded through an `UPDATE` and
+//!     cross-entity argument typing (`TaskId` and `UserId`).
+//!   - `create_subtask` — self-ref `parent_task_id: Option<TaskId>`
+//!     plus four typed PKs in a row.
+//!   - `add_blocker` — role-wrapped junction insert (the only place
+//!     the `TaskDependencyPk*` wrappers are user-visible).
+//!   - `add_project_member` — composite-PK insert with typed components.
+//!   - `tasks_assigned_to` — typed PK as a value passed into
+//!     `Column::AssigneeId.eq(...)` for a filter.
 
-use crate::entity::{channel, guild, member, message, user};
-use sea_orm::{ActiveValue::*, DbErr, DeleteResult, entity::*, query::*};
+use crate::entity::{project, project_member, task, task_dependency, user};
+use sea_orm::{ActiveValue::*, DbErr, entity::*, query::*};
 
-pub async fn send_message<C: ConnectionTrait>(
+pub async fn reassign_task<C: ConnectionTrait>(
     db: &C,
-    channel_id: channel::ChannelId,
-    author_id: user::UserId,
-    content: String,
-) -> Result<message::Model, DbErr> {
-    message::ActiveModel {
-        channel_id: Set(channel_id),
-        author_id: Set(author_id),
-        mention_user_id: Set(None),
-        reply_to_message_id: Set(None),
-        content: Set(content),
+    task_id: task::TaskId,
+    new_assignee: user::UserId,
+) -> Result<task::Model, DbErr> {
+    let existing = task::Entity::find_by_id(task_id)
+        .one(db)
+        .await?
+        .ok_or_else(|| DbErr::RecordNotFound(format!("task {task_id:?}")))?;
+    let mut active: task::ActiveModel = existing.into();
+    active.assignee_id = Set(new_assignee);
+    active.update(db).await
+}
+
+pub async fn create_subtask<C: ConnectionTrait>(
+    db: &C,
+    project_id: project::ProjectId,
+    parent: task::TaskId,
+    assignee: user::UserId,
+    title: String,
+) -> Result<task::Model, DbErr> {
+    task::ActiveModel {
+        project_id: Set(project_id),
+        assignee_id: Set(assignee),
+        reviewer_id: Set(None),
+        parent_task_id: Set(Some(parent)),
+        title: Set(title),
         ..Default::default()
     }
     .insert(db)
     .await
 }
 
-pub async fn send_message_with_mention<C: ConnectionTrait>(
+pub async fn add_blocker<C: ConnectionTrait>(
     db: &C,
-    channel_id: channel::ChannelId,
-    author_id: user::UserId,
-    mention: user::UserId,
-    reply_to: Option<message::MessageId>,
-    content: String,
-) -> Result<message::Model, DbErr> {
-    message::ActiveModel {
-        channel_id: Set(channel_id),
-        author_id: Set(author_id),
-        mention_user_id: Set(Some(mention)),
-        reply_to_message_id: Set(reply_to),
-        content: Set(content),
-        ..Default::default()
+    blocker: task::TaskId,
+    blocked: task::TaskId,
+) -> Result<task_dependency::Model, DbErr> {
+    task_dependency::ActiveModel {
+        blocker_task_id: Set(task_dependency::TaskDependencyPkBlockerTaskId(blocker)),
+        blocked_task_id: Set(task_dependency::TaskDependencyPkBlockedTaskId(blocked)),
     }
     .insert(db)
     .await
 }
 
-pub async fn add_member<C: ConnectionTrait>(
+pub async fn add_project_member<C: ConnectionTrait>(
     db: &C,
-    guild_id: guild::GuildId,
+    project_id: project::ProjectId,
     user_id: user::UserId,
-    nickname: Option<String>,
-) -> Result<member::Model, DbErr> {
-    member::ActiveModel {
-        guild_id: Set(guild_id),
+    role: String,
+) -> Result<project_member::Model, DbErr> {
+    project_member::ActiveModel {
+        project_id: Set(project_id),
         user_id: Set(user_id),
-        nickname: Set(nickname),
+        role: Set(role),
     }
     .insert(db)
     .await
 }
 
-pub async fn find_member<C: ConnectionTrait>(
+pub async fn tasks_assigned_to<C: ConnectionTrait>(
     db: &C,
-    guild_id: guild::GuildId,
     user_id: user::UserId,
-) -> Result<Option<member::Model>, DbErr> {
-    member::Entity::find_by_id((guild_id, user_id)).one(db).await
-}
-
-pub async fn ban_user_from_guild<C: ConnectionTrait>(
-    db: &C,
-    guild_id: guild::GuildId,
-    user_id: user::UserId,
-) -> Result<DeleteResult, DbErr> {
-    member::Entity::delete_by_id((guild_id, user_id))
-        .exec(db)
-        .await
-}
-
-pub async fn list_replies_to<C: ConnectionTrait>(
-    db: &C,
-    message_id: message::MessageId,
-) -> Result<Vec<message::Model>, DbErr> {
-    message::Entity::find()
-        .filter(message::Column::ReplyToMessageId.eq(message_id))
+) -> Result<Vec<task::Model>, DbErr> {
+    task::Entity::find()
+        .filter(task::Column::AssigneeId.eq(user_id))
         .all(db)
         .await
 }

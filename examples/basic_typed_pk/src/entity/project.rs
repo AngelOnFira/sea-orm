@@ -2,42 +2,42 @@
 
 use sea_orm::entity::prelude::*;
 
-pub type GuildId = sea_orm::Id<Entity, i64>;
+pub type ProjectId = sea_orm::Id<Entity, i64>;
 
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
-#[sea_orm(table_name = "guild")]
+#[sea_orm(table_name = "project")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment)]
-    pub id: GuildId,
+    pub id: ProjectId,
     pub name: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
-    #[sea_orm(has_many = "super::channel::Entity")]
-    Channel,
-    #[sea_orm(has_many = "super::member::Entity")]
-    Member,
+    #[sea_orm(has_many = "super::project_member::Entity")]
+    ProjectMember,
+    #[sea_orm(has_many = "super::task::Entity")]
+    Task,
 }
 
-impl Related<super::channel::Entity> for Entity {
+impl Related<super::project_member::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::Channel.def()
+        Relation::ProjectMember.def()
     }
 }
 
-impl Related<super::member::Entity> for Entity {
+impl Related<super::task::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::Member.def()
+        Relation::Task.def()
     }
 }
 
 impl Related<super::user::Entity> for Entity {
     fn to() -> RelationDef {
-        super::member::Relation::User.def()
+        super::project_member::Relation::User.def()
     }
     fn via() -> Option<RelationDef> {
-        Some(super::member::Relation::Guild.def().rev())
+        Some(super::project_member::Relation::Project.def().rev())
     }
 }
 
