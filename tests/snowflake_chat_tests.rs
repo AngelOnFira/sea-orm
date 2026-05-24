@@ -167,5 +167,34 @@ async fn snowflake_chat_end_to_end() -> Result<(), sea_orm::DbErr> {
     assert_eq!(replies.len(), 1);
     assert_eq!(replies[0].content, "hi alice");
 
+    // Pin coverage of the three PK-taking signatures with a typed PK:
+    //   - `find_by_id(TypedPk)`   (already exercised above for composite PKs)
+    //   - `Select::filter_by_id(TypedPk)`
+    //   - `delete_by_id(TypedPk)`
+    // The untyped (raw scalar) paths for the same three are exercised in
+    // `tests/query_tests.rs`, `tests/active_model_ex_tests.rs`,
+    // `tests/multi_select_tests.rs`, and `tests/delete_by_id_tests.rs`.
+    let fetched_via_filter_by_id = guild::Entity::load()
+        .filter_by_id(guild_id)
+        .one(db)
+        .await?
+        .expect("filter_by_id with typed PK");
+    assert_eq!(fetched_via_filter_by_id.id, guild_id);
+
+    let delete_target = guild::ActiveModel {
+        name: Set("To Be Removed".to_string()),
+        ..Default::default()
+    }
+    .insert(db)
+    .await?;
+    let delete_res = guild::Entity::delete_by_id(delete_target.id).exec(db).await?;
+    assert_eq!(delete_res.rows_affected, 1);
+    assert!(
+        guild::Entity::find_by_id(delete_target.id)
+            .one(db)
+            .await?
+            .is_none()
+    );
+
     Ok(())
 }
