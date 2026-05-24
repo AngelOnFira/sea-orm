@@ -1,7 +1,7 @@
 error[E0277]: `i32` cannot be used as a primary-key argument for `user::Entity`
-  --> tests/value_type_pk_compile_fail/raw_int_rejected.rs:29:38
+  --> tests/value_type_pk_compile_fail/raw_int_rejected.rs:33:38
    |
-29 |     let _ = user::Entity::find_by_id(1i32);
+33 |     let _ = user::Entity::find_by_id(1i32);
    |                                      ^^^^ expected `user::Entity`'s `PrimaryKey::ValueType` (or something convertible to it), got `i32`
    |
    = help: the trait `FindByIdArg<user::Entity>` is not implemented for `i32`

@@ -2,25 +2,33 @@
 //! `Id<E, T>`-wrapped primary keys.
 //!
 //! Each fixture under `tests/value_type_pk_compile_fail/` must fail to
-//! compile. The harness:
+//! compile. Two layers of assertion:
 //!
-//! 1. Runs trybuild with `TRYBUILD=overwrite`, so trybuild still
-//!    enforces the must-fail invariant but silently refreshes the
-//!    `.stderr` snapshot on cosmetic rustc-version drift.
-//! 2. After compilation, reads each `.stderr` and checks that the
-//!    `// expect-error: <substring>` directives at the top of the
-//!    fixture all appear in the captured output.
+//! 1. **Trybuild exact-match**: the captured stderr must match the
+//!    committed `.stderr` snapshot character-for-character. This
+//!    catches subtle changes in how rustc presents the error
+//!    (formatting tweaks, new hint lines, reordered notes, etc.).
+//!    Snapshots are generated against CI's pinned stable rustc; when
+//!    CI updates to a newer rustc and the snapshots drift, the test
+//!    fails loudly and contributors regenerate them with
+//!    `TRYBUILD=overwrite cargo test --test value_type_pk_safety_tests`.
 //!
-//! Directives let us pin "the error mentions our diagnostic / our
-//! trait name / the offending type" without depending on exact rustc
-//! formatting. The substrings are usually our own prose (the
-//! `#[diagnostic::on_unimplemented]` messages) or our own type names —
-//! both stable across rustc upgrades.
+//! 2. **Substring check**: each fixture declares
+//!    `// expect-error: <substring>` directives in its header; the
+//!    harness asserts each substring appears in the captured stderr.
+//!    Substrings are our own prose (the
+//!    `#[diagnostic::on_unimplemented]` messages) or our own type
+//!    names — both stable across rustc upgrades. This layer catches
+//!    "must-fail invariant held but for the wrong reason" — e.g. the
+//!    fixture is failing on a syntax error rather than the trait-bound
+//!    error we wanted.
 //!
-//! Committed `.stderr` files are kept as a debugging reference but
-//! are no longer authoritative: CI rewrites them on every run, and
-//! contributors should glance at them rather than match them
-//! character-for-character.
+//! Local development tip: if a snapshot diff looks cosmetic and your
+//! `rustc --version` differs from CI's stable, the snapshots may be
+//! stale relative to your toolchain. Either install CI's stable
+//! (`rustup install <ci-version>` + `rustup override set <ci-version>`
+//! in this repo dir) or regenerate with `TRYBUILD=overwrite` and let
+//! CI confirm.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -29,21 +37,11 @@ const FIXTURE_DIR: &str = "tests/value_type_pk_compile_fail";
 
 #[test]
 fn pk_safety() {
-    // Tell trybuild not to fail on stderr-snapshot mismatches; the
-    // must-fail-to-compile check is still enforced (a fixture that
-    // accidentally starts compiling still panics inside trybuild's
-    // drop, failing this test).
-    //
-    // SAFETY: `set_var` is `unsafe` because env vars affect global
-    // state visible to other threads. This test runs serially within
-    // the test binary and the only consumer of `TRYBUILD` is trybuild
-    // itself, invoked synchronously below.
-    unsafe {
-        std::env::set_var("TRYBUILD", "overwrite");
-    }
-
     // Trybuild's actual compilation happens at `TestCases::drop` time.
-    // Scope it so the .stderr files are populated before we read them.
+    // Scope it so the .stderr files are populated before we read them
+    // for the substring layer below. Trybuild will panic in drop if a
+    // fixture compiles when it shouldn't, OR if a fixture's captured
+    // stderr drifts from the committed snapshot — both load-bearing.
     {
         let t = trybuild::TestCases::new();
         t.compile_fail(format!("{FIXTURE_DIR}/*.rs"));
