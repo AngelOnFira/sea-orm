@@ -1,6 +1,6 @@
 use sea_orm::entity::prelude::*;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, DeriveValueType)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, DeriveValueType)]
 pub struct MessageId(pub i64);
 
 // Role wrappers for the two FK columns that both target `user.id`. Wrapping

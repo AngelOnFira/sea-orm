@@ -3,8 +3,9 @@
 //! explicitly.
 //!
 //! The `DeriveEntityModel` macro consults this trait at trait-resolution
-//! time, so it correctly handles wrapper types and `Id<E, T>` aliases that
-//! the previous textual heuristic could not see through. For example:
+//! time. Wrapper types and `Id<E, T>` aliases resolve through their inner
+//! type because each emits a delegating impl of [`DelegatesPkAutoIncrementHint`].
+//! For example:
 //!
 //! - `pub id: i64` resolves to `true` via the integer-primitive impl.
 //! - `pub id: RoleId` where `RoleId(pub i64)` is `DeriveValueType`

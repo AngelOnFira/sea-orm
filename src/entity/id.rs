@@ -6,15 +6,14 @@
 //! cross-entity ID confusion at use sites — e.g. passing a
 //! `Id<post::Entity, _>` to `user::Entity::find_by_id` is a type error.
 //!
-//! ## Why two type parameters?
+//! ## Type parameters
 //!
-//! A single-parameter `Id<E>` design (where the inner type lives behind an
-//! associated trait) ran into a recursive-type problem: when a model field
-//! is `pub id: CakeId` and `CakeId = Id<Entity>`, the entity's
-//! `PrimaryKey::ValueType` is `Id<Entity>`, and `Id<Entity>::value: Inner`
-//! would have to be `Id<Entity>` — an infinite type. Spelling out `T` in
-//! the alias (`pub type CakeId = sea_orm::Id<Entity, i32>;`) sidesteps it
-//! cleanly: `T` is always the raw scalar.
+//! `T` is always the raw scalar — `Id<E, T>::value: T`. Keeping the scalar
+//! as an explicit type parameter (rather than projecting it through an
+//! associated type on `E`) keeps `PrimaryKey::ValueType = Id<E, T>` from
+//! becoming infinitely recursive (`Id<E>::Inner = Id<E>::Inner = …`),
+//! since the alias spells `T` directly:
+//! `pub type CakeId = sea_orm::Id<Entity, i32>;`.
 //!
 //! ## Usage
 //!
@@ -104,8 +103,8 @@ impl<E: EntityTrait, T> Id<E, T> {
     }
 }
 
-// Manual impls: deriving would (incorrectly) require `E: Clone` etc., bounds
-// on the phantom rather than the stored value.
+// Manual impls so the trait bounds land on `T` (the stored value) rather
+// than `E` (a phantom).
 
 impl<E: EntityTrait, T: Clone> Clone for Id<E, T> {
     fn clone(&self) -> Self {

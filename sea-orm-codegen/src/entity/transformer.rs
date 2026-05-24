@@ -497,9 +497,10 @@ mod tests {
 
     #[test]
     fn multi_fk_same_column_records_both_backrefs() -> Result<(), Box<dyn Error>> {
-        // Two FKs on the same `user_id` column — pointing at two different
-        // parents. Per-column back-references are currently a scalar
-        // `Option<String>`, so only the *last* one survives.
+        // The same SQL column (`child.user_id`) is constrained against two
+        // different parents. `Column::refs` is a `Vec<ColumnRef>`, so both
+        // back-references survive the transform and are available to
+        // `--with-pk-newtypes` codegen.
         let users = Table::create()
             .table("users")
             .col(
@@ -558,9 +559,6 @@ mod tests {
             .find(|c| c.name == "user_id")
             .expect("missing user_id column");
 
-        // Both FKs are real and `refs: Vec<ColumnRef>` records both. The
-        // earlier scalar `Option<String>` would have lost one parent to
-        // overwrite; we now keep them all.
         assert_eq!(
             user_id_col.refs.len(),
             2,

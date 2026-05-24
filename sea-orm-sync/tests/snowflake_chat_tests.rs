@@ -1,13 +1,16 @@
 //! Runtime tests for the snowflake_chat fixture.
 //!
-//! Every PK in this fixture is a `DeriveValueType` newtype wrapping
-//! `i64`, declared with no `#[sea_orm(auto_increment)]` annotation.
-//! The `PrimaryKeyTrait::auto_increment()` impl emitted by the macro
-//! resolves through `PkAutoIncrementHint` to the inner `i64` and back
-//! to `true`. If the trait resolution regresses (e.g. someone reverts
-//! to a textual heuristic that can't see through the wrapper), schema
-//! creation here will stop emitting `AUTOINCREMENT` and the inserts
-//! that omit the `id` will fail.
+//! Each PK in this fixture is a `DeriveValueType` newtype wrapping `i64`
+//! and is declared with no explicit `#[sea_orm(auto_increment)]`
+//! annotation. The pinned contract is:
+//!
+//!   `PrimaryKeyTrait::auto_increment()` for such a wrapper resolves to
+//!   `true` via `PkAutoIncrementHint` delegating through the inner `i64`.
+//!
+//! Each `insert(...)` below relies on that — the rows omit `id` and the
+//! database fills it in. If the trait resolution stops returning `true`
+//! for these wrappers, schema creation drops `AUTOINCREMENT` and the
+//! inserts fail at runtime.
 
 pub mod common;
 

@@ -1,6 +1,6 @@
 use sea_orm::entity::prelude::*;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, DeriveValueType)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, DeriveValueType)]
 pub struct DmThreadId(pub i64);
 
 // Role wrappers: both columns FK to `user.id`. Distinct types make

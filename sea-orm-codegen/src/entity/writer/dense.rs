@@ -73,11 +73,10 @@ impl EntityWriter {
                     if !col.auto_increment {
                         attrs.push(quote! { auto_increment = false });
                     } else if column_option.pk_newtype.is_some() {
-                        // In newtype mode the field type is a wrapper, so
-                        // `DeriveEntityModel`'s integer-primitive allowlist
-                        // defaults `auto_increment` to false. Emit the
-                        // explicit `auto_increment` qualifier to preserve
-                        // the source schema's behavior.
+                        // Emit `auto_increment` explicitly so the regenerated
+                        // entity matches the source schema regardless of how
+                        // `PkAutoIncrementHint` resolves for the wrapper type
+                        // chosen by downstream code.
                         attrs.push(quote! { auto_increment });
                     }
                 }

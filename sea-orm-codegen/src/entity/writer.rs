@@ -484,14 +484,13 @@ impl EntityWriter {
     /// fallback applies if the composite-PK pattern would produce a
     /// trailing `IdId`.
     fn build_pk_newtype_index(entities: &[Entity]) -> PkNewtypeIndex {
-        fn alias_name(table_camel: &str, suffix: &str) -> String {
-            // Prefer `<Table>Id`, but if that would produce `IdId` (because
-            // <Table> already ends in `Id`), use `<Table>Pk` to avoid the
-            // ugly doubled suffix.
-            if table_camel.ends_with("Id") && suffix == "Id" {
+        fn single_pk_alias(table_camel: &str) -> String {
+            // Append `Id` to the table name. Tables already ending in `Id`
+            // would produce `IdId`; collapse that to `<Table>Pk` instead.
+            if table_camel.ends_with("Id") {
                 format!("{table_camel}Pk")
             } else {
-                format!("{table_camel}{suffix}")
+                format!("{table_camel}Id")
             }
         }
 
@@ -500,7 +499,7 @@ impl EntityWriter {
             let table_camel = entity.table_name.to_upper_camel_case();
             for pk in entity.primary_keys.iter() {
                 let ident_str = if entity.primary_keys.len() == 1 {
-                    alias_name(&table_camel, "Id")
+                    single_pk_alias(&table_camel)
                 } else {
                     // Composite PK: always prefix with table name so the
                     // alias is collision-free. `<Table><Column>` — and if
@@ -527,9 +526,9 @@ impl EntityWriter {
     ///
     /// When a table has ≥2 columns FK-referencing the same parent table,
     /// each of those columns gets a distinct standalone wrapper struct so
-    /// the columns are type-distinct even though they share a parent. The
-    /// naming convention is `<TableCamel>Pk<ColumnCamel>` (per the OP's
-    /// #1310 proposal — verbose but collision-free).
+    /// the columns are type-distinct even though they share a parent.
+    /// Wrappers are named `<TableCamel>Pk<ColumnCamel>` — verbose but
+    /// guaranteed collision-free across tables and columns.
     ///
     /// Currently restricted to PK columns; non-PK role disambiguation
     /// could be added later.

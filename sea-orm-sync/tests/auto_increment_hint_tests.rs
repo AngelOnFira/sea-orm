@@ -4,8 +4,6 @@
 //! correctly and that the trait propagates through `DeriveValueType`
 //! wrappers and `Id<E, T>` aliases.
 
-#![allow(unused_imports)]
-
 use sea_orm::{DeriveValueType, Id, PkAutoIncrementHint, entity::prelude::*};
 
 #[derive(Clone, Debug, PartialEq, Eq, DeriveValueType)]

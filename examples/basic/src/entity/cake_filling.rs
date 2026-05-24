@@ -7,9 +7,9 @@ use sea_orm::entity::prelude::*;
 #[sea_orm(table_name = "cake_filling")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
-    pub cake_id: super::cake::CakeId,
+    pub cake_id: i32,
     #[sea_orm(primary_key, auto_increment = false)]
-    pub filling_id: super::filling::FillingId,
+    pub filling_id: i32,
     #[sea_orm(
         belongs_to,
         from = "cake_id",

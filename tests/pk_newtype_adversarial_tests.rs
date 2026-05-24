@@ -11,14 +11,53 @@
 //!   - Option<TypedPk> for nullable FK serialises sensibly when the value
 //!     is `None` (covered indirectly by `active_model_ex_tests.rs` for the
 //!     DB round-trip; this is the in-memory serde counterpart).
+//!
+//! Two minimal local entities (`post`, `user`) keep this file self-
+//! contained — the snowflake_chat fixture uses `DeriveValueType` newtype
+//! wrappers, which exhibit different layout/serde guarantees than the
+//! `Id<E, T>` alias path under test here.
 
-#![allow(unused_imports)]
-
-mod common;
-use common::blogger::{post, user};
-use sea_orm::EntityTrait;
+use sea_orm::entity::prelude::*;
 use std::collections::HashMap;
 use std::mem::size_of;
+
+mod post {
+    use sea_orm::entity::prelude::*;
+
+    pub type PostId = sea_orm::Id<Entity, i32>;
+
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
+    #[sea_orm(table_name = "post")]
+    pub struct Model {
+        #[sea_orm(primary_key, auto_increment = false)]
+        pub id: PostId,
+        pub title: String,
+    }
+
+    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+    pub enum Relation {}
+
+    impl ActiveModelBehavior for ActiveModel {}
+}
+
+mod user {
+    use sea_orm::entity::prelude::*;
+
+    pub type UserId = sea_orm::Id<Entity, i32>;
+
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
+    #[sea_orm(table_name = "user")]
+    pub struct Model {
+        #[sea_orm(primary_key, auto_increment = false)]
+        pub id: UserId,
+        pub name: String,
+    }
+
+    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+    pub enum Relation {}
+
+    impl ActiveModelBehavior for ActiveModel {}
+}
 
 #[test]
 fn layout_is_repr_transparent() {
@@ -35,7 +74,7 @@ fn typed_ids_are_hashable_in_separate_maps() {
     users.insert(user::UserId::new(7), "user-7");
     assert_eq!(posts.get(&post::PostId::new(7)), Some(&"post-7"));
     assert_eq!(users.get(&user::UserId::new(7)), Some(&"user-7"));
-    // Sanity: same inner value, different keyspace.
+    // Same inner value, different keyspace.
     assert_eq!(posts.len(), 1);
     assert_eq!(users.len(), 1);
 }
@@ -44,7 +83,7 @@ fn typed_ids_are_hashable_in_separate_maps() {
 fn copy_and_clone_only_when_inner_supports_them() {
     // i32 is Copy → PostId is Copy.
     let a = post::PostId::new(3);
-    let b = a; // Copy works.
+    let b = a;
     assert_eq!(a, b);
     let c = a.clone();
     assert_eq!(a, c);
@@ -64,17 +103,15 @@ fn display_delegates_to_inner() {
 
 #[test]
 fn debug_includes_entity_tag() {
-    // Without the entity tag, `Id<post,_>(7)` and `Id<user,_>(7)` would
-    // print identically in logs — defeating the wrapper's debugging value.
-    // The Debug impl prints `Id<<parent_module>::<EntityName>>(<inner>)`
-    // — last two `::` segments of `type_name::<E>()` — to disambiguate
-    // entities that conventionally all name their struct `Entity`.
+    // The Debug impl prints the entity tag so that
+    // `Id<post::Entity, _>(7)` and `Id<user::Entity, _>(7)` don't render
+    // identically in logs. The tag is the last two `::` segments of
+    // `type_name::<E>()` to disambiguate entities that all conventionally
+    // name their inner struct `Entity`.
     let post_id = post::PostId::new(7);
     let user_id = user::UserId::new(7);
     let post_dbg = format!("{post_id:?}");
     let user_dbg = format!("{user_id:?}");
-    // Module path varies (test, mod, …); just assert the entity-tag is
-    // present and the two values are distinguishable.
     assert!(post_dbg.contains("post::Entity"), "got: {post_dbg}");
     assert!(user_dbg.contains("user::Entity"), "got: {user_dbg}");
     assert_ne!(
@@ -114,16 +151,12 @@ mod serde_shape {
     }
 }
 
-// Compile-time guard: an `Id<E, String>` constructed from a string literal
-// must accept a `String` payload and survive a serde round-trip. Even
-// though the workspace doesn't currently use a string-PK newtype in its
-// fixtures, the macro path should accept it — exercised here via a
-// freestanding alias (no entity wiring needed).
+/// `Id<E, String>` accepts a `String` payload and survives a serde
+/// round-trip. The phantom entity here is `user::Entity` — only the
+/// inner-`T` behaviour is under test.
 #[cfg(feature = "with-json")]
 #[test]
 fn string_typed_id_round_trips_through_serde() {
-    // Use the existing `user::Entity` as the phantom — we only need an
-    // `EntityTrait` impl; the inner-T behaviour is what's under test.
     type StringPk = sea_orm::Id<user::Entity, String>;
     let id: StringPk = sea_orm::Id::new("abc-xyz".to_string());
     let v = serde_json::to_value(&id).unwrap();

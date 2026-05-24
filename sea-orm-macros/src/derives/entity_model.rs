@@ -532,12 +532,13 @@ pub fn expand_derive_entity_model(
     }
 
     let primary_key = {
-        // Composite primary keys never auto-increment. For single PKs, an
-        // explicit `#[sea_orm(auto_increment = ...)]` override wins; otherwise
-        // the default is resolved at trait-resolution time via
-        // `<FieldType as PkAutoIncrementHint>::IS_AUTO`. Resolving through the
-        // trait lets the macro see through `DeriveValueType` wrappers and
-        // `Id<E, T>` aliases that a textual heuristic could not.
+        // `PrimaryKeyTrait::auto_increment()` body picks one of three sources:
+        //   1. Composite PKs always emit `false`.
+        //   2. An explicit `#[sea_orm(auto_increment = ...)]` on the column emits
+        //      the literal bool.
+        //   3. Otherwise emit `<FieldType as PkAutoIncrementHint>::IS_AUTO`, so
+        //      `DeriveValueType` wrappers and `Id<E, T>` aliases resolve through
+        //      their inner type at trait-resolution time.
         let auto_increment_body = if primary_keys.len() != 1 {
             quote! { false }
         } else if let Some(value) = auto_increment {

@@ -1,6 +1,6 @@
 use sea_orm::entity::prelude::*;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, DeriveValueType)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, DeriveValueType)]
 pub struct GuildId(pub i64);
 
 #[sea_orm::model]

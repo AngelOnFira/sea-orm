@@ -2,14 +2,12 @@
 
 use sea_orm::entity::prelude::*;
 
-pub type FillingId = sea_orm::Id<Entity, i32>;
-
 #[sea_orm::model]
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
 #[sea_orm(table_name = "filling")]
 pub struct Model {
-    #[sea_orm(primary_key, auto_increment)]
-    pub id: FillingId,
+    #[sea_orm(primary_key)]
+    pub id: i32,
     pub name: String,
     #[sea_orm(has_many, via = "cake_filling")]
     pub cakes: HasMany<super::cake::Entity>,
