@@ -1,51 +1,134 @@
 //! Trybuild harness pinning the compile-time safety contract for
 //! `Id<E, T>`-wrapped primary keys.
 //!
-//! These fixtures must not compile. If a future change accidentally
-//! re-opens the `find_by_id(raw_int)` or cross-PK confusion footguns,
-//! the corresponding fixture will start compiling and this test fails.
+//! Each fixture under `tests/value_type_pk_compile_fail/` must fail to
+//! compile. The harness:
 //!
-//! ## Why this is skipped on CI
+//! 1. Runs trybuild with `TRYBUILD=overwrite`, so trybuild still
+//!    enforces the must-fail invariant but silently refreshes the
+//!    `.stderr` snapshot on cosmetic rustc-version drift.
+//! 2. After compilation, reads each `.stderr` and checks that the
+//!    `// expect-error: <substring>` directives at the top of the
+//!    fixture all appear in the captured output.
 //!
-//! Trybuild does an exact-string comparison against `.stderr` files.
-//! rustc's error messages — specifically how it abbreviates type paths
-//! — change between versions. For example, rustc 1.88 emits
-//! `sea_orm::Id<post::Entity, i32>` while later versions emit
-//! `Id<post::Entity, i32>`. Either form is correct; they're just
-//! different output for the same underlying error.
+//! Directives let us pin "the error mentions our diagnostic / our
+//! trait name / the offending type" without depending on exact rustc
+//! formatting. The substrings are usually our own prose (the
+//! `#[diagnostic::on_unimplemented]` messages) or our own type names —
+//! both stable across rustc upgrades.
 //!
-//! Rather than pin a specific rustc or constantly rebless the fixtures
-//! across stable releases, the trybuild assertion runs only outside CI.
-//! Locally, contributors should run this test to verify the diagnostic
-//! messages still read well after changes to `FindByIdArg`'s
-//! `on_unimplemented` attribute or the role-wrapper naming.
-//!
-//! ### Known coverage gap
-//!
-//! The fixtures under `tests/value_type_pk_compile_fail/` are only ever
-//! compiled by trybuild. When this test returns early on CI, those
-//! fixtures are skipped entirely — they are not wired in as a `[[test]]`
-//! target and the per-database integration suites do not pull them in.
-//! That means a regression which makes one of the fixtures start
-//! compiling on the CI rustc version will not be caught here. The
-//! workaround is to run this test locally before merging.
-//!
-//! A future improvement is to add a CI-friendly "compile-fail smoke" run
-//! that invokes `rustc` on each fixture and checks only the exit code
-//! (ignoring stderr), so the must-not-compile invariant is exercised
-//! without the version-sensitive stderr diff.
+//! Committed `.stderr` files are kept as a debugging reference but
+//! are no longer authoritative: CI rewrites them on every run, and
+//! contributors should glance at them rather than match them
+//! character-for-character.
+
+use std::fs;
+use std::path::{Path, PathBuf};
+
+const FIXTURE_DIR: &str = "tests/value_type_pk_compile_fail";
 
 #[test]
 fn pk_safety() {
-    // Skip in CI because trybuild's exact `.stderr` match is sensitive
-    // to rustc version. See the module docs above.
-    if std::env::var("CI").is_ok() {
-        eprintln!(
-            "Skipping trybuild fixtures: stderr is rustc-version-sensitive. \
-             Run locally to verify the diagnostic messages still read well."
-        );
-        return;
+    // Tell trybuild not to fail on stderr-snapshot mismatches; the
+    // must-fail-to-compile check is still enforced (a fixture that
+    // accidentally starts compiling still panics inside trybuild's
+    // drop, failing this test).
+    //
+    // SAFETY: `set_var` is `unsafe` because env vars affect global
+    // state visible to other threads. This test runs serially within
+    // the test binary and the only consumer of `TRYBUILD` is trybuild
+    // itself, invoked synchronously below.
+    unsafe {
+        std::env::set_var("TRYBUILD", "overwrite");
     }
-    let t = trybuild::TestCases::new();
-    t.compile_fail("tests/value_type_pk_compile_fail/*.rs");
+
+    // Trybuild's actual compilation happens at `TestCases::drop` time.
+    // Scope it so the .stderr files are populated before we read them.
+    {
+        let t = trybuild::TestCases::new();
+        t.compile_fail(format!("{FIXTURE_DIR}/*.rs"));
+    }
+
+    // Walk each fixture and verify its `expect-error:` directives are
+    // present in the captured stderr.
+    let fixtures = list_fixtures(FIXTURE_DIR);
+    assert!(
+        !fixtures.is_empty(),
+        "no compile-fail fixtures discovered under {FIXTURE_DIR}"
+    );
+
+    let mut failures: Vec<String> = Vec::new();
+    for fixture in fixtures {
+        let directives = parse_expect_directives(&fixture);
+        assert!(
+            !directives.is_empty(),
+            "{}: every compile-fail fixture must declare at least one \
+             `// expect-error: <substring>` directive in its header",
+            fixture.display()
+        );
+
+        let stderr_path = fixture.with_extension("stderr");
+        let stderr = match fs::read_to_string(&stderr_path) {
+            Ok(s) => s,
+            Err(e) => {
+                failures.push(format!(
+                    "{}: could not read {} — trybuild should have produced \
+                     it (TRYBUILD=overwrite). I/O error: {e}",
+                    fixture.display(),
+                    stderr_path.display()
+                ));
+                continue;
+            }
+        };
+
+        for needle in &directives {
+            if !stderr.contains(needle) {
+                failures.push(format!(
+                    "{}: stderr is missing expected substring {needle:?}.\n\
+                     Full stderr captured by trybuild:\n{stderr}",
+                    fixture.display()
+                ));
+            }
+        }
+    }
+
+    assert!(
+        failures.is_empty(),
+        "compile-fail substring check failed:\n\n{}",
+        failures.join("\n----\n")
+    );
+}
+
+fn list_fixtures(dir: &str) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    let read = match fs::read_dir(dir) {
+        Ok(r) => r,
+        Err(_) => return out,
+    };
+    for entry in read.flatten() {
+        let path = entry.path();
+        if path.extension().is_some_and(|e| e == "rs") {
+            out.push(path);
+        }
+    }
+    out.sort();
+    out
+}
+
+/// Parse `// expect-error: <substring>` lines from the fixture header.
+/// Tolerates leading whitespace, `//!` and `//` styles.
+fn parse_expect_directives(fixture: &Path) -> Vec<String> {
+    let source = fs::read_to_string(fixture)
+        .unwrap_or_else(|e| panic!("can't read {}: {e}", fixture.display()));
+
+    source
+        .lines()
+        .filter_map(|line| {
+            let trimmed = line.trim_start();
+            let body = trimmed.strip_prefix("//!").or_else(|| trimmed.strip_prefix("//"))?;
+            let body = body.trim_start();
+            body.strip_prefix("expect-error:").map(|s| s.trim().to_string())
+        })
+        .filter(|s| !s.is_empty())
+        .collect()
 }

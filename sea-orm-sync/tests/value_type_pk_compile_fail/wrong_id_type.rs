@@ -2,6 +2,10 @@
 //! `Id<user::Entity, _>` and `Id<post::Entity, _>` are type-distinct
 //! despite having the same inner scalar.
 
+// expect-error: cannot be used as a primary-key argument
+// expect-error: FindByIdArg
+// expect-error: post::Entity
+
 use sea_orm::entity::prelude::*;
 
 mod user {
