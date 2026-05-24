@@ -203,10 +203,19 @@ pub trait EntityTrait: EntityName {
 
     /// Find a model by primary key.
     ///
-    /// `values` must be exactly the entity's `PrimaryKey::ValueType` —
-    /// there is no implicit conversion. For unary PKs this is just the
-    /// scalar type (e.g. `i32`, `Uuid`); for composite PKs it is a tuple
-    /// (e.g. `(i32, String)`).
+    /// `values` must satisfy [`FindByIdArg<Self>`], which is implemented
+    /// blanket for any `T: Into<<Self::PrimaryKey as PrimaryKeyTrait>::ValueType>`.
+    /// In practice that means:
+    ///
+    /// - For an entity with a raw scalar PK (`pub id: i32`), pass any
+    ///   `T: Into<i32>` — including `i32`, `u8`, `&i32`, etc.
+    /// - For an entity with a typed PK newtype (`pub id: UserId` where
+    ///   `UserId` is a `DeriveValueType` wrapper or `sea_orm::Id<E, T>`
+    ///   alias), pass the newtype itself: `find_by_id(UserId::new(7))`.
+    ///   Raw scalars are rejected — there is no `From<i32> for UserId`
+    ///   to satisfy the `Into` bound.
+    /// - For composite PKs, pass a tuple of the component types
+    ///   (e.g. `(i32, String)` or `(UserId, RoleId)`).
     ///
     /// # Type-safe PKs
     ///

@@ -81,8 +81,9 @@ pub struct Id<E: EntityTrait, T> {
     // compiler must never widen an `Id<A, _>` to an `Id<B, _>` even if A
     // and B are related. `fn() -> E` alone would be covariant; `fn(E)`
     // alone would be contravariant; the combined form is the canonical
-    // way to spell invariance. Function-pointer types are unconditionally
-    // `Send`, so this preserves auto-traits.
+    // way to spell invariance. Function-pointer types unconditionally
+    // implement both Send and Sync auto-traits, so wrapping `E` in this
+    // marker preserves them on `Id<E, T>`.
     _marker: PhantomData<fn(E) -> E>,
 }
 

@@ -20,10 +20,20 @@
 //! messages still read well after changes to `FindByIdArg`'s
 //! `on_unimplemented` attribute or the role-wrapper naming.
 //!
-//! The fixtures themselves remain in source — they're still meaningful
-//! examples of what should fail to compile, and any breakage there is
-//! caught by the per-database integration suites which (a) compile the
-//! same test crate and (b) fail loudly if a fixture started compiling.
+//! ### Known coverage gap
+//!
+//! The fixtures under `tests/value_type_pk_compile_fail/` are only ever
+//! compiled by trybuild. When this test returns early on CI, those
+//! fixtures are skipped entirely — they are not wired in as a `[[test]]`
+//! target and the per-database integration suites do not pull them in.
+//! That means a regression which makes one of the fixtures start
+//! compiling on the CI rustc version will not be caught here. The
+//! workaround is to run this test locally before merging.
+//!
+//! A future improvement is to add a CI-friendly "compile-fail smoke" run
+//! that invokes `rustc` on each fixture and checks only the exit code
+//! (ignoring stderr), so the must-not-compile invariant is exercised
+//! without the version-sensitive stderr diff.
 
 #[test]
 fn pk_safety() {

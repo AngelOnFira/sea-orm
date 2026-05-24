@@ -152,7 +152,7 @@ db.get_schema_registry("my_crate::*")
 
 ## Type-safe primary keys
 
-`find_by_id` / `filter_by_id` take the entity's `PrimaryKey::ValueType` exactly — no `Into` conversion. To get compile-time protection against passing the wrong id type, wrap each entity's PK in a per-entity newtype with `DeriveValueType`:
+`find_by_id` / `filter_by_id` / `delete_by_id` accept any `T: FindByIdArg<E>`, which is implemented blanket for `T: Into<<E::PrimaryKey as PrimaryKeyTrait>::ValueType>`. So `&str → String` and `u8 → i32` style conversions still flow through. The type safety comes from the PK type itself: a newtype like `UserId` has no `From<i32>`, so `find_by_id(1)` against a `UserId` PK fails to compile. To get that compile-time protection, wrap each entity's PK in a per-entity newtype with `DeriveValueType` (or use a `sea_orm::Id<E, T>` alias):
 
 ```rust
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, DeriveValueType)]
