@@ -1042,11 +1042,11 @@ pub trait EntityTrait: EntityName {
     /// ```
     fn delete_by_id<T>(values: T) -> ValidatedDeleteOne<Self>
     where
-        T: Into<<Self::PrimaryKey as PrimaryKeyTrait>::ValueType>,
+        T: FindByIdArg<Self>,
     {
         let mut am = Self::ActiveModel::default();
         let mut keys = Self::PrimaryKey::iter();
-        for v in values.into().into_value_tuple() {
+        for v in values.into_pk_value().into_value_tuple() {
             if let Some(key) = keys.next() {
                 let col = key.into_column();
                 am.set(col, v);
@@ -1161,7 +1161,7 @@ mod tests {
 
         fn delete_by_id<T>(value: T)
         where
-            T: Into<<<hello::Entity as EntityTrait>::PrimaryKey as PrimaryKeyTrait>::ValueType>,
+            T: crate::FindByIdArg<hello::Entity>,
         {
             assert_eq!(
                 hello::Entity::delete_by_id(value)
