@@ -6,7 +6,6 @@ pub mod film_store;
 #[cfg(not(feature = "sync"))]
 pub mod runtime;
 pub mod setup;
-pub mod snowflake_chat;
 
 use sea_orm::DatabaseConnection;
 
