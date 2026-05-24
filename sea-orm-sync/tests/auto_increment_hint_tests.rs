@@ -4,7 +4,7 @@
 //! correctly and that the trait propagates through `DeriveValueType`
 //! wrappers and `Id<E, T>` aliases.
 
-use sea_orm::{DeriveValueType, Id, PkAutoIncrementHint, entity::prelude::*};
+use sea_orm::{DeriveValueType, Id, PkAutoIncrementHint, PrimaryKeyTrait, entity::prelude::*};
 
 #[derive(Clone, Debug, PartialEq, Eq, DeriveValueType)]
 pub struct IntegerWrapper(pub i64);
@@ -26,6 +26,48 @@ mod ent_for_id {
         #[sea_orm(primary_key)]
         pub id: i32,
         pub name: String,
+    }
+    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+    pub enum Relation {}
+    impl ActiveModelBehavior for ActiveModel {}
+}
+
+/// Entity whose PK is an `Id<E, T>` alias (the shape
+/// `sea-orm-cli generate --with-pk-newtypes` produces). Exercises
+/// trait resolution one layer up from raw scalars: the macro emits
+/// `<EntId as PkAutoIncrementHint>::IS_AUTO`, which resolves via the
+/// `DelegatesPkAutoIncrementHint` blanket on `Id<E, T>` down to the
+/// inner `i64`.
+mod ent_for_typed_pk {
+    use sea_orm::entity::prelude::*;
+    pub type EntId = sea_orm::Id<Entity, i64>;
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
+    #[sea_orm(table_name = "ent_for_typed_pk")]
+    pub struct Model {
+        #[sea_orm(primary_key)]
+        pub id: EntId,
+        pub name: String,
+    }
+    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+    pub enum Relation {}
+    impl ActiveModelBehavior for ActiveModel {}
+}
+
+/// Entity with a composite PK whose components are themselves typed
+/// `Id<E, T>` aliases. The macro must short-circuit to `false`
+/// regardless of how the trait would resolve for the individual
+/// component types.
+mod ent_with_composite_pk {
+    use sea_orm::entity::prelude::*;
+    pub type LeftId = sea_orm::Id<Entity, i64>;
+    pub type RightId = sea_orm::Id<Entity, i64>;
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
+    #[sea_orm(table_name = "ent_with_composite_pk")]
+    pub struct Model {
+        #[sea_orm(primary_key)]
+        pub left_id: LeftId,
+        #[sea_orm(primary_key)]
+        pub right_id: RightId,
     }
     #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
     pub enum Relation {}
@@ -70,6 +112,16 @@ fn id_alias_propagates_through_inner() {
 #[test]
 fn entity_with_i32_pk_resolves_true() {
     assert!(<ent_for_id::PrimaryKey as PrimaryKeyTrait>::auto_increment());
+}
+
+#[test]
+fn entity_with_id_alias_pk_resolves_true() {
+    assert!(<ent_for_typed_pk::PrimaryKey as PrimaryKeyTrait>::auto_increment());
+}
+
+#[test]
+fn composite_pk_is_never_auto_increment() {
+    assert!(!<ent_with_composite_pk::PrimaryKey as PrimaryKeyTrait>::auto_increment());
 }
 
 #[cfg(feature = "with-uuid")]

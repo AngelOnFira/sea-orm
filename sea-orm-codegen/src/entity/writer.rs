@@ -3792,8 +3792,9 @@ mod tests {
         );
     }
 
-    /// End-to-end codegen check on a snowflake-chat-shaped schema. Exercises
-    /// the harder cases that the simple two-table test above doesn't reach:
+    /// End-to-end codegen check on a multi-entity schema that combines
+    /// every PK-newtype pattern in one transform pass. Exercises the
+    /// harder cases that the simple two-table test above doesn't reach:
     ///
     /// - `message.reply_to_message_id` is a self-referencing nullable FK —
     ///   should emit `Option<MessageId>` (local alias, no `super::` path).
@@ -3809,11 +3810,12 @@ mod tests {
     ///   referencing `user.id` — this is the role-wrapper case
     ///   (`UserFollowerPkUserId`, `UserFollowerPkFollowerId`).
     ///
-    /// Mirrors `tests/common/snowflake_chat/` but without the `snowflake_`
-    /// table-name prefix so the generated alias names match the hand-written
-    /// domain types (`UserId` rather than `SnowflakeUserId`).
+    /// The runtime counterpart to this codegen check lives in
+    /// `examples/basic_typed_pk/` (different schema shape — task
+    /// tracker — but covers the same patterns end-to-end through a
+    /// real DB).
     #[test]
-    fn pk_newtypes_snowflake_chat_shape() {
+    fn pk_newtypes_full_pattern_coverage() {
         use crate::EntityTransformer;
         use sea_query::{ColumnDef, ForeignKey, Table};
 
