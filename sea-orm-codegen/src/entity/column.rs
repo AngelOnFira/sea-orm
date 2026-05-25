@@ -39,6 +39,10 @@ pub struct Column {
     pub(crate) refs: Vec<ColumnRef>,
 }
 
+// `Copy` was removed when `pk_newtype: Option<PkNewtypeContext>` was
+// added — `PkNewtypeContext` holds `Rc<PkNewtypeIndex>` fields, and
+// `Rc` is not `Copy` by design. The struct is always passed by
+// reference at call sites, so this isn't load-bearing.
 #[derive(Debug, Default, Clone)]
 pub struct ColumnOption {
     pub(crate) date_time_crate: DateTimeCrate,

@@ -2,13 +2,13 @@
 
 use sea_orm::entity::prelude::*;
 
-pub type UserId = sea_orm::Id<Entity, i64>;
+pub type UserPk = sea_orm::Id<Entity, i64>;
 
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
 #[sea_orm(table_name = "user")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment)]
-    pub id: UserId,
+    pub id: UserPk,
     pub name: String,
     #[sea_orm(unique)]
     pub email: String,

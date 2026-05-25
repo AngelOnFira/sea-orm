@@ -125,14 +125,14 @@ impl EntityTransformer {
                     }),
             );
             // Populate per-column FK back-references from the relations.
-            // After this, any FK column carries `refs: Vec<ColumnRef>` of
+            // FK columns will carry `refs: Vec<ColumnRef>` of
             // `(parent_table, parent_column)` so downstream codegen can
-            // resolve the referenced PK type(s) without re-walking the
-            // relations. A column may appear in multiple BelongsTo
-            // relations (legal SQL when the same column is constrained
-            // against multiple parents), in which case all back-refs are
-            // recorded; under `--with-pk-newtypes` the codegen picks the
-            // first one and documents the ambiguity.
+            // resolve the referenced PK type(s). A column may appear in
+            // multiple BelongsTo relations (legal SQL when the same
+            // column is constrained against multiple parents), in which
+            // case all back-refs are recorded; under
+            // `--with-pk-newtypes` the codegen picks the first one and
+            // documents the ambiguity.
             for rel in relations.iter() {
                 if !matches!(rel.rel_type, RelationType::BelongsTo) {
                     continue;

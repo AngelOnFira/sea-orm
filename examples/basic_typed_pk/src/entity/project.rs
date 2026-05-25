@@ -2,13 +2,13 @@
 
 use sea_orm::entity::prelude::*;
 
-pub type ProjectId = sea_orm::Id<Entity, i64>;
+pub type ProjectPk = sea_orm::Id<Entity, i64>;
 
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
 #[sea_orm(table_name = "project")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment)]
-    pub id: ProjectId,
+    pub id: ProjectPk,
     pub name: String,
 }
 

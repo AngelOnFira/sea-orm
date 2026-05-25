@@ -8,8 +8,8 @@
 //! Each function covers a distinct typed-PK call shape:
 //!
 //!   - `reassign_task` — typed PK threaded through an `UPDATE` and
-//!     cross-entity argument typing (`TaskId` and `UserId`).
-//!   - `create_subtask` — self-ref `parent_task_id: Option<TaskId>`
+//!     cross-entity argument typing (`TaskPk` and `UserPk`).
+//!   - `create_subtask` — self-ref `parent_task_id: Option<TaskPk>`
 //!     plus four typed PKs in a row.
 //!   - `add_blocker` — role-wrapped junction insert (the only place
 //!     the `TaskDependencyPk*` wrappers are user-visible).
@@ -22,8 +22,8 @@ use sea_orm::{ActiveValue::*, DbErr, entity::*, query::*};
 
 pub async fn reassign_task<C: ConnectionTrait>(
     db: &C,
-    task_id: task::TaskId,
-    new_assignee: user::UserId,
+    task_id: task::TaskPk,
+    new_assignee: user::UserPk,
 ) -> Result<task::Model, DbErr> {
     let existing = task::Entity::find_by_id(task_id)
         .one(db)
@@ -36,9 +36,9 @@ pub async fn reassign_task<C: ConnectionTrait>(
 
 pub async fn create_subtask<C: ConnectionTrait>(
     db: &C,
-    project_id: project::ProjectId,
-    parent: task::TaskId,
-    assignee: user::UserId,
+    project_id: project::ProjectPk,
+    parent: task::TaskPk,
+    assignee: user::UserPk,
     title: String,
 ) -> Result<task::Model, DbErr> {
     task::ActiveModel {
@@ -55,8 +55,8 @@ pub async fn create_subtask<C: ConnectionTrait>(
 
 pub async fn add_blocker<C: ConnectionTrait>(
     db: &C,
-    blocker: task::TaskId,
-    blocked: task::TaskId,
+    blocker: task::TaskPk,
+    blocked: task::TaskPk,
 ) -> Result<task_dependency::Model, DbErr> {
     task_dependency::ActiveModel {
         blocker_task_id: Set(task_dependency::TaskDependencyPkBlockerTaskId(blocker)),
@@ -68,8 +68,8 @@ pub async fn add_blocker<C: ConnectionTrait>(
 
 pub async fn add_project_member<C: ConnectionTrait>(
     db: &C,
-    project_id: project::ProjectId,
-    user_id: user::UserId,
+    project_id: project::ProjectPk,
+    user_id: user::UserPk,
     role: String,
 ) -> Result<project_member::Model, DbErr> {
     project_member::ActiveModel {
@@ -83,7 +83,7 @@ pub async fn add_project_member<C: ConnectionTrait>(
 
 pub async fn tasks_assigned_to<C: ConnectionTrait>(
     db: &C,
-    user_id: user::UserId,
+    user_id: user::UserPk,
 ) -> Result<Vec<task::Model>, DbErr> {
     task::Entity::find()
         .filter(task::Column::AssigneeId.eq(user_id))

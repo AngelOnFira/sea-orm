@@ -2,8 +2,9 @@ use crate::{ActiveEnum, ColumnOption, Entity, PkNewtypeIndex, util::escape_rust_
 use heck::ToUpperCamelCase;
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::rc::Rc;
-use std::{collections::BTreeMap, str::FromStr};
+use std::str::FromStr;
 use syn::{punctuated::Punctuated, token::Comma};
 use tracing::info;
 
@@ -290,11 +291,6 @@ impl EntityWriterContext {
         }
     }
 
-    /// Per-entity `ColumnOption`. The `pk_newtype` context is populated
-    /// together (current_table + indexes) when `--with-pk-newtypes` is
-    /// on, or all left `None` otherwise. The bundling makes the
-    /// invariant "all set or none set" structural — there's no way to
-    /// hand `Column::get_rs_type` a half-populated state.
     fn column_option(
         &self,
         entity: &Entity,
@@ -449,10 +445,27 @@ impl EntityWriter {
                         context.impl_active_model_behavior,
                     )
                 };
-                // The first code block from each writer is the imports
-                // (`use sea_orm::entity::prelude::*;`). Splice the
-                // newtype wrapper declarations right after it so the
-                // file reads imports → wrappers → model → ….
+                // The PK newtype aliases and role wrappers need to live
+                // *after* the `use sea_orm::entity::prelude::*;` import
+                // (so `sea_orm::Id` resolves) and *before* the model
+                // declaration (so the model field type can name them).
+                //
+                // Without splicing, a file would emit:
+                //
+                //     pub struct Model {
+                //         pub id: TaskPk,            // unresolved
+                //         ...
+                //     }
+                //     use sea_orm::entity::prelude::*;
+                //
+                // With splicing, the file reads:
+                //
+                //     use sea_orm::entity::prelude::*;
+                //     pub type TaskPk = sea_orm::Id<Entity, i64>;
+                //     pub struct Model {
+                //         pub id: TaskPk,            // resolves
+                //         ...
+                //     }
                 let code_blocks: Vec<_> = if pk_newtype_decls.is_empty() {
                     code_blocks
                 } else if let Some((imports, rest)) = code_blocks.split_first() {
@@ -474,41 +487,24 @@ impl EntityWriter {
 
     /// Build the `(table, column) -> AliasIdent` lookup of PK newtype
     /// aliases. Naming rule:
-    /// - Unary PK: `<TableCamel>Id`.
-    /// - Composite PK: `<TableCamel><ColumnCamel>` (always prefixed to
-    ///   avoid collisions like bare `Id` or `CakeId` clashing with the
-    ///   parent table's alias).
-    ///
-    /// If `<TableCamel>` already ends in `Id` (e.g. a table named
-    /// `cake_id`) the suffix becomes `Pk` to avoid `CakeIdId`. The same
-    /// fallback applies if the composite-PK pattern would produce a
-    /// trailing `IdId`.
+    /// - Unary PK: `<TableCamel>Pk`. Consistent across every entity and
+    ///   never collides with the parent table's alias.
+    /// - Composite PK: `<TableCamel><ColumnCamel>`, always prefixed to
+    ///   avoid bare-`Id` aliases. If the column name camel-cases to a
+    ///   value already ending in `Id` and the resulting combined name
+    ///   would end in `IdId`, one suffix is stripped
+    ///   (e.g. table `cake_id`, col `id` -> `CakeId`, not `CakeIdId`).
     fn build_pk_newtype_index(entities: &[Entity]) -> PkNewtypeIndex {
-        fn single_pk_alias(table_camel: &str) -> String {
-            // Append `Id` to the table name. Tables already ending in `Id`
-            // would produce `IdId`; collapse that to `<Table>Pk` instead.
-            if table_camel.ends_with("Id") {
-                format!("{table_camel}Pk")
-            } else {
-                format!("{table_camel}Id")
-            }
-        }
-
         let mut index = PkNewtypeIndex::new();
         for entity in entities {
             let table_camel = entity.table_name.to_upper_camel_case();
             for pk in entity.primary_keys.iter() {
                 let ident_str = if entity.primary_keys.len() == 1 {
-                    single_pk_alias(&table_camel)
+                    format!("{table_camel}Pk")
                 } else {
-                    // Composite PK: always prefix with table name so the
-                    // alias is collision-free. `<Table><Column>` — and if
-                    // ColumnCamel already ends in `Id`, that's fine
-                    // (`CakeFillingCakeId`).
                     let column_camel = pk.name.to_upper_camel_case();
                     let combined = format!("{table_camel}{column_camel}");
                     if combined.ends_with("IdId") {
-                        // e.g. table `cake_id`, col `id` → strip one Id.
                         format!("{}Id", &combined[..combined.len() - 4])
                     } else {
                         combined
@@ -524,11 +520,24 @@ impl EntityWriter {
     /// Build the `(own_table, fk_column) -> RoleWrapperIdent` lookup for
     /// self-referential and many-FK-to-same-parent junction tables.
     ///
-    /// When a table has ≥2 columns FK-referencing the same parent table,
-    /// each of those columns gets a distinct standalone wrapper struct so
-    /// the columns are type-distinct even though they share a parent.
-    /// Wrappers are named `<TableCamel>Pk<ColumnCamel>` — verbose but
-    /// guaranteed collision-free across tables and columns.
+    /// When a table has more than one column FK-referencing the same
+    /// parent table, each of those columns gets a distinct standalone
+    /// wrapper struct so the columns are type-distinct even though they
+    /// share a parent. Wrappers are named
+    /// `<TableCamel>Pk<ColumnCamel>` — verbose but guaranteed
+    /// collision-free across tables and columns.
+    ///
+    /// Example: `user_follower` has two columns
+    /// (`user_id`, `follower_id`) both referencing `user.id`. Codegen
+    /// emits:
+    ///
+    /// ```ignore
+    /// pub struct UserFollowerPkUserId(pub super::user::UserPk);
+    /// pub struct UserFollowerPkFollowerId(pub super::user::UserPk);
+    /// ```
+    ///
+    /// so writing the two PK columns in the wrong positional order is
+    /// a type error.
     ///
     /// Currently restricted to PK columns; non-PK role disambiguation
     /// could be added later.
@@ -537,16 +546,15 @@ impl EntityWriter {
         for entity in entities {
             // Count how many of this entity's columns FK-reference each
             // parent table.
-            let mut ref_counts: std::collections::HashMap<String, usize> =
-                std::collections::HashMap::new();
+            let mut ref_counts: HashMap<String, usize> = HashMap::new();
             for col in entity.columns.iter() {
                 if let Some(first_ref) = col.refs.first() {
                     *ref_counts.entry(first_ref.table.clone()).or_insert(0) += 1;
                 }
             }
-            // For PK columns whose parent is referenced by 2+ columns of
-            // this entity, emit a role wrapper.
-            let pk_names: std::collections::HashSet<&String> =
+            // For PK columns whose parent is referenced by more than one
+            // column of this entity, emit a role wrapper.
+            let pk_names: HashSet<&String> =
                 entity.primary_keys.iter().map(|pk| &pk.name).collect();
             for col in entity.columns.iter() {
                 if !pk_names.contains(&col.name) {
@@ -3635,438 +3643,26 @@ mod tests {
 
         // Parent emits a type alias and the PK field is typed.
         assert!(
-            cake_norm.contains("pubtypeCakeId=sea_orm::Id<Entity,i32>"),
-            "cake.rs should declare `pub type CakeId = sea_orm::Id<Entity, i32>;` (got:\n{})",
+            cake_norm.contains("pubtypeCakePk=sea_orm::Id<Entity,i32>"),
+            "cake.rs should declare `pub type CakePk = sea_orm::Id<Entity, i32>;` (got:\n{})",
             cake.content
         );
         assert!(
-            cake_norm.contains("pubid:CakeId"),
-            "cake.rs should type `id` as `CakeId` (got:\n{})",
+            cake_norm.contains("pubid:CakePk"),
+            "cake.rs should type `id` as `CakePk` (got:\n{})",
             cake.content
         );
 
-        // Child emits its own alias plus references the parent's via `super::cake::CakeId`.
+        // Child emits its own alias plus references the parent's via `super::cake::CakePk`.
         assert!(
-            fruit_norm.contains("pubtypeFruitId=sea_orm::Id<Entity,i32>"),
-            "fruit.rs should declare `pub type FruitId = sea_orm::Id<Entity, i32>;` (got:\n{})",
+            fruit_norm.contains("pubtypeFruitPk=sea_orm::Id<Entity,i32>"),
+            "fruit.rs should declare `pub type FruitPk = sea_orm::Id<Entity, i32>;` (got:\n{})",
             fruit.content
         );
         assert!(
-            fruit_norm.contains("super::cake::CakeId"),
-            "fruit.rs should reference parent PK as `super::cake::CakeId` (got:\n{})",
+            fruit_norm.contains("super::cake::CakePk"),
+            "fruit.rs should reference parent PK as `super::cake::CakePk` (got:\n{})",
             fruit.content
-        );
-    }
-
-    #[test]
-    fn pk_newtype_table_named_cake_id_produces_weird_wrapper() {
-        // A table literally named `cake_id` with PK `id`. The naming
-        // rule for unary PKs is `{TableCamel}Id` => `CakeIdId`. Capture
-        // and report the weird wrapper name.
-        use crate::EntityTransformer;
-        use sea_query::{ColumnDef, Table};
-
-        let stmt = Table::create()
-            .table("cake_id")
-            .col(
-                ColumnDef::new("id")
-                    .integer()
-                    .not_null()
-                    .auto_increment()
-                    .primary_key(),
-            )
-            .to_owned();
-        let writer = EntityTransformer::transform(vec![stmt]).unwrap();
-        let context = EntityWriterContext::new(
-            EntityFormat::Compact,
-            WithPrelude::None,
-            WithSerde::None,
-            false,
-            DateTimeCrate::Chrono,
-            BigIntegerType::I64,
-            None,
-            false,
-            false,
-            false,
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            false,
-            true,
-            BannerVersion::Off,
-            PkNewtypeFormat::Inline,
-        );
-        let output = writer.generate(&context);
-        let file = output
-            .files
-            .iter()
-            .find(|f| f.name == "cake_id.rs")
-            .expect("missing cake_id.rs");
-        let norm: String = file.content.split_whitespace().collect();
-        eprintln!("---- cake_id.rs ----\n{}", file.content);
-
-        // After the naming fix: a table named `cake_id` produces a sensible
-        // `CakeIdPk` alias instead of the ugly `CakeIdId`.
-        assert!(
-            !norm.contains("CakeIdId"),
-            "wrapper name should not include `CakeIdId` (got:\n{})",
-            file.content
-        );
-        assert!(
-            norm.contains("pubtypeCakeIdPk=sea_orm::Id<Entity,i32>"),
-            "table `cake_id` should produce alias `CakeIdPk` (got:\n{})",
-            file.content
-        );
-    }
-
-    #[test]
-    fn pk_newtype_composite_with_bare_id_column_produces_bare_id_wrapper() {
-        // Composite PK: `id` + `secondary_id`. The naming rule short-circuits
-        // when `column_camel.ends_with("Id")`, so `id` => `Id` (a top-level
-        // type just called `Id`) — terrible identifier and collides with any
-        // `Id`-named import.
-        use crate::EntityTransformer;
-        use sea_query::{ColumnDef, Table};
-
-        let stmt = Table::create()
-            .table("widget")
-            .col(ColumnDef::new("id").integer().not_null())
-            .col(ColumnDef::new("secondary_id").integer().not_null())
-            .primary_key(sea_query::Index::create().col("id").col("secondary_id"))
-            .to_owned();
-        let writer = EntityTransformer::transform(vec![stmt]).unwrap();
-        let context = EntityWriterContext::new(
-            EntityFormat::Compact,
-            WithPrelude::None,
-            WithSerde::None,
-            false,
-            DateTimeCrate::Chrono,
-            BigIntegerType::I64,
-            None,
-            false,
-            false,
-            false,
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            false,
-            true,
-            BannerVersion::Off,
-            PkNewtypeFormat::Inline,
-        );
-        let output = writer.generate(&context);
-        let file = output
-            .files
-            .iter()
-            .find(|f| f.name == "widget.rs")
-            .expect("missing widget.rs");
-        eprintln!("---- widget.rs ----\n{}", file.content);
-        let norm: String = file.content.split_whitespace().collect();
-
-        // After the naming fix: composite PK always prefixes with the
-        // table name. A column literally named `id` produces `WidgetId`,
-        // never bare `Id`.
-        //
-        // Note: the assertion targets *standalone declarations* (not the
-        // type usage inside the model struct). The model field is
-        // `pub id: WidgetId`, which legitimately contains `:WidgetId`.
-        // We check the type-decl pattern instead.
-        assert!(
-            !norm.contains("pubtypeId="),
-            "bare `Id` alias should never be emitted (got:\n{})",
-            file.content
-        );
-        assert!(
-            norm.contains("pubtypeWidgetId=sea_orm::Id<Entity,i32>"),
-            "composite-PK `id` column should produce alias `WidgetId` (got:\n{})",
-            file.content
-        );
-        assert!(
-            norm.contains("pubtypeWidgetSecondaryId=sea_orm::Id<Entity,i32>"),
-            "composite-PK `secondary_id` column should produce alias `WidgetSecondaryId` (got:\n{})",
-            file.content
-        );
-    }
-
-    /// End-to-end codegen check on a multi-entity schema that combines
-    /// every PK-newtype pattern in one transform pass. Exercises the
-    /// harder cases that the simple two-table test above doesn't reach:
-    ///
-    /// - `message.reply_to_message_id` is a self-referencing nullable FK —
-    ///   should emit `Option<MessageId>` (local alias, no `super::` path).
-    /// - `message` has two non-PK FK columns pointing at `user.id`
-    ///   (`author_id`, `mention_user_id`) — neither gets a role wrapper
-    ///   (role wrappers are PK-only by design); both resolve to the parent
-    ///   `super::user::UserId` alias.
-    /// - `member` has a composite PK whose components are themselves typed
-    ///   PK references (`guild_id` -> `GuildId`, `user_id` -> `UserId`).
-    ///   All-FK composite PKs emit no local aliases; each column resolves
-    ///   to the parent alias.
-    /// - `user_follower` is a junction with TWO PK columns both FK-
-    ///   referencing `user.id` — this is the role-wrapper case
-    ///   (`UserFollowerPkUserId`, `UserFollowerPkFollowerId`).
-    ///
-    /// The runtime counterpart to this codegen check lives in
-    /// `examples/basic_typed_pk/` (different schema shape — task
-    /// tracker — but covers the same patterns end-to-end through a
-    /// real DB).
-    #[test]
-    fn pk_newtypes_full_pattern_coverage() {
-        use crate::EntityTransformer;
-        use sea_query::{ColumnDef, ForeignKey, Table};
-
-        let guild = Table::create()
-            .table("guild")
-            .col(
-                ColumnDef::new("id")
-                    .big_integer()
-                    .not_null()
-                    .auto_increment()
-                    .primary_key(),
-            )
-            .col(ColumnDef::new("name").string().not_null())
-            .to_owned();
-
-        let user = Table::create()
-            .table("user")
-            .col(
-                ColumnDef::new("id")
-                    .big_integer()
-                    .not_null()
-                    .auto_increment()
-                    .primary_key(),
-            )
-            .col(ColumnDef::new("username").string().not_null())
-            .to_owned();
-
-        let channel = Table::create()
-            .table("channel")
-            .col(
-                ColumnDef::new("id")
-                    .big_integer()
-                    .not_null()
-                    .auto_increment()
-                    .primary_key(),
-            )
-            .col(ColumnDef::new("guild_id").big_integer().not_null())
-            .col(ColumnDef::new("name").string().not_null())
-            .foreign_key(
-                ForeignKey::create()
-                    .name("fk-channel-guild")
-                    .from("channel", "guild_id")
-                    .to("guild", "id"),
-            )
-            .to_owned();
-
-        // Composite PK: (guild_id, user_id), both FK-referenced.
-        let member = Table::create()
-            .table("member")
-            .col(ColumnDef::new("guild_id").big_integer().not_null())
-            .col(ColumnDef::new("user_id").big_integer().not_null())
-            .col(ColumnDef::new("nickname").string())
-            .primary_key(
-                sea_query::Index::create()
-                    .col("guild_id")
-                    .col("user_id"),
-            )
-            .foreign_key(
-                ForeignKey::create()
-                    .name("fk-member-guild")
-                    .from("member", "guild_id")
-                    .to("guild", "id"),
-            )
-            .foreign_key(
-                ForeignKey::create()
-                    .name("fk-member-user")
-                    .from("member", "user_id")
-                    .to("user", "id"),
-            )
-            .to_owned();
-
-        // Multi-FK-to-user (author + mention) + self-ref (reply_to_message_id).
-        let message = Table::create()
-            .table("message")
-            .col(
-                ColumnDef::new("id")
-                    .big_integer()
-                    .not_null()
-                    .auto_increment()
-                    .primary_key(),
-            )
-            .col(ColumnDef::new("channel_id").big_integer().not_null())
-            .col(ColumnDef::new("author_id").big_integer().not_null())
-            .col(ColumnDef::new("mention_user_id").big_integer())
-            .col(ColumnDef::new("reply_to_message_id").big_integer())
-            .col(ColumnDef::new("content").string().not_null())
-            .foreign_key(
-                ForeignKey::create()
-                    .name("fk-message-channel")
-                    .from("message", "channel_id")
-                    .to("channel", "id"),
-            )
-            .foreign_key(
-                ForeignKey::create()
-                    .name("fk-message-author")
-                    .from("message", "author_id")
-                    .to("user", "id"),
-            )
-            .foreign_key(
-                ForeignKey::create()
-                    .name("fk-message-mention")
-                    .from("message", "mention_user_id")
-                    .to("user", "id"),
-            )
-            .foreign_key(
-                ForeignKey::create()
-                    .name("fk-message-reply")
-                    .from("message", "reply_to_message_id")
-                    .to("message", "id"),
-            )
-            .to_owned();
-
-        // Junction table with two PK columns both FK-referencing user.id.
-        // This is the role-wrapper trigger.
-        let user_follower = Table::create()
-            .table("user_follower")
-            .col(ColumnDef::new("user_id").big_integer().not_null())
-            .col(ColumnDef::new("follower_id").big_integer().not_null())
-            .primary_key(
-                sea_query::Index::create()
-                    .col("user_id")
-                    .col("follower_id"),
-            )
-            .foreign_key(
-                ForeignKey::create()
-                    .name("fk-uf-user")
-                    .from("user_follower", "user_id")
-                    .to("user", "id"),
-            )
-            .foreign_key(
-                ForeignKey::create()
-                    .name("fk-uf-follower")
-                    .from("user_follower", "follower_id")
-                    .to("user", "id"),
-            )
-            .to_owned();
-
-        let writer = EntityTransformer::transform(vec![
-            guild,
-            user,
-            channel,
-            member,
-            message,
-            user_follower,
-        ])
-        .unwrap();
-        let context = EntityWriterContext::new(
-            EntityFormat::Compact,
-            WithPrelude::None,
-            WithSerde::None,
-            false,
-            DateTimeCrate::Chrono,
-            BigIntegerType::I64,
-            None,
-            false,
-            false,
-            false,
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            false,
-            true,
-            BannerVersion::Off,
-            PkNewtypeFormat::Inline,
-        );
-        let output = writer.generate(&context);
-        let by_name = |n: &str| -> String {
-            output
-                .files
-                .iter()
-                .find(|f| f.name == n)
-                .unwrap_or_else(|| panic!("missing {n}"))
-                .content
-                .split_whitespace()
-                .collect::<String>()
-        };
-
-        // Simple aliases on the parent entities.
-        let guild = by_name("guild.rs");
-        assert!(
-            guild.contains("pubtypeGuildId=sea_orm::Id<Entity,i64>"),
-            "guild.rs missing GuildId alias: {guild}"
-        );
-        let user = by_name("user.rs");
-        assert!(
-            user.contains("pubtypeUserId=sea_orm::Id<Entity,i64>"),
-            "user.rs missing UserId alias: {user}"
-        );
-
-        // Channel: FK column threaded to the parent alias.
-        let channel = by_name("channel.rs");
-        assert!(
-            channel.contains("pubguild_id:super::guild::GuildId"),
-            "channel.rs FK should resolve to super::guild::GuildId: {channel}"
-        );
-
-        // Composite PK on member: both columns are FKs to other entities'
-        // PKs, so no local aliases are emitted — each column resolves
-        // directly to the parent's typed alias.
-        let member = by_name("member.rs");
-        assert!(
-            member.contains("pubguild_id:super::guild::GuildId"),
-            "member.rs guild_id should resolve to super::guild::GuildId: {member}"
-        );
-        assert!(
-            member.contains("pubuser_id:super::user::UserId"),
-            "member.rs user_id should resolve to super::user::UserId: {member}"
-        );
-
-        // Message: non-PK FK columns to user.id resolve directly to the
-        // parent alias (role wrappers are PK-only). Self-ref reply column
-        // resolves to the local alias as `Option<MessageId>`.
-        let message = by_name("message.rs");
-        assert!(
-            message.contains("pubauthor_id:super::user::UserId"),
-            "message.rs author_id should resolve to super::user::UserId: {message}"
-        );
-        assert!(
-            message.contains("pubmention_user_id:Option<super::user::UserId>"),
-            "message.rs mention_user_id should be Option<super::user::UserId>: {message}"
-        );
-        assert!(
-            message.contains("Option<MessageId>"),
-            "message.rs reply_to_message_id should resolve to Option<MessageId> (local): {message}"
-        );
-        assert!(
-            !message.contains("super::message::MessageId"),
-            "self-ref FK should not use the super:: path: {message}"
-        );
-
-        // user_follower junction: both PK columns are FKs to user.id, so
-        // role wrappers fire and both columns are typed as the local
-        // wrapper structs around super::user::UserId.
-        let uf = by_name("user_follower.rs");
-        assert!(
-            uf.contains("structUserFollowerPkUserId(pubsuper::user::UserId)"),
-            "user_follower.rs missing UserFollowerPkUserId wrapper struct: {uf}"
-        );
-        assert!(
-            uf.contains("structUserFollowerPkFollowerId(pubsuper::user::UserId)"),
-            "user_follower.rs missing UserFollowerPkFollowerId wrapper struct: {uf}"
-        );
-        assert!(
-            uf.contains("pubuser_id:UserFollowerPkUserId"),
-            "user_follower.rs user_id should be typed as UserFollowerPkUserId: {uf}"
-        );
-        assert!(
-            uf.contains("pubfollower_id:UserFollowerPkFollowerId"),
-            "user_follower.rs follower_id should be typed as UserFollowerPkFollowerId: {uf}"
         );
     }
 }

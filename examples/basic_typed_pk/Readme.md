@@ -8,16 +8,16 @@ Five tables, each chosen to cover one PK-newtype pattern not already
 demonstrated by another table:
 
 - **Cross-entity ID safety.** `user`, `project`, `task` each get a
-  distinct alias (`UserId`, `ProjectId`, `TaskId`) so passing the
+  distinct alias (`UserPk`, `ProjectPk`, `TaskPk`) so passing the
   wrong id to the wrong API is a compile error.
 - **Composite primary key with typed components.** `project_member`
-  is keyed by `(ProjectId, UserId)` — the alias types carry into
+  is keyed by `(ProjectPk, UserPk)` — the alias types carry into
   `find_by_id`, `delete_by_id`, and the tuple destructuring.
-- **Self-reference.** `task.parent_task_id: Option<TaskId>` resolves
-  to the local alias, not `super::task::TaskId`.
+- **Self-reference.** `task.parent_task_id: Option<TaskPk>` resolves
+  to the local alias, not `super::task::TaskPk`.
 - **Multi-FK to the same parent in non-PK position.** `task` has
   both `assignee_id` and `reviewer_id` referencing `user.id`. Both
-  share the parent's `UserId` type — codegen does **not** role-wrap
+  share the parent's `UserPk` type — codegen does **not** role-wrap
   non-PK FK columns (role wrappers are PK-only by design).
 - **Role wrappers on a junction.** `task_dependency` has two PK
   columns, both FK-referencing `task.id`. Codegen emits

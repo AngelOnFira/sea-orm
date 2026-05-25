@@ -1,15 +1,3 @@
-//! Typed-PK task tracker example.
-//!
-//! Everything under `src/entity/` was produced by
-//! `sea-orm-cli generate entity --with-pk-newtypes` against
-//! `tasks.sql`. The shape of those files — `pub type FooId =
-//! sea_orm::Id<Entity, i64>;` aliases, role wrappers on the
-//! `task_dependency` junction, FK columns typed as parent aliases —
-//! is exactly what codegen emits today. This example exercises that
-//! generated code end-to-end against in-memory SQLite.
-//!
-//! See `Readme.md` for the regeneration command.
-
 mod entity;
 mod operations;
 
@@ -25,7 +13,7 @@ async fn main() -> Result<(), DbErr> {
     create_schema(&db).await?;
 
     // Create two users. `.insert(...)` returns the persisted Model with
-    // a typed `UserId` already populated — no raw `i64` ever appears.
+    // a typed `UserPk` already populated — no raw `i64` ever appears.
     let alice = user::ActiveModel {
         name: Set("Alice".to_string()),
         email: Set("alice@example.com".to_string()),
@@ -76,7 +64,7 @@ async fn main() -> Result<(), DbErr> {
     println!("draft policy: {draft_policy:?}");
 
     // Subtask via self-ref. `parent_task_id: Set(Some(parent))` carries
-    // a typed `TaskId` — there's no way to accidentally pass a UserId.
+    // a typed `TaskPk` — there's no way to accidentally pass a UserId.
     let outline =
         operations::create_subtask(&db, audit.id, draft_policy.id, bob.id, "Outline".to_string())
             .await?;
@@ -113,7 +101,7 @@ async fn main() -> Result<(), DbErr> {
     }
 
     // Composite-PK delete inline. Reversing the tuple components is a
-    // compile error because `ProjectId` and `UserId` are distinct types.
+    // compile error because `ProjectPk` and `UserPk` are distinct types.
     let removed = project_member::Entity::delete_by_id((audit.id, bob.id))
         .exec(&db)
         .await?;

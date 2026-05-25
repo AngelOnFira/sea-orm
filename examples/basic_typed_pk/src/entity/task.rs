@@ -2,17 +2,17 @@
 
 use sea_orm::entity::prelude::*;
 
-pub type TaskId = sea_orm::Id<Entity, i64>;
+pub type TaskPk = sea_orm::Id<Entity, i64>;
 
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
 #[sea_orm(table_name = "task")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment)]
-    pub id: TaskId,
-    pub project_id: super::project::ProjectId,
-    pub assignee_id: super::user::UserId,
-    pub reviewer_id: Option<super::user::UserId>,
-    pub parent_task_id: Option<TaskId>,
+    pub id: TaskPk,
+    pub project_id: super::project::ProjectPk,
+    pub assignee_id: super::user::UserPk,
+    pub reviewer_id: Option<super::user::UserPk>,
+    pub parent_task_id: Option<TaskPk>,
     pub title: String,
 }
 

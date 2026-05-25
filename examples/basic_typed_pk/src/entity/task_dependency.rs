@@ -4,11 +4,11 @@ use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, DeriveValueType)]
 #[sea_orm(try_from_u64)]
-pub struct TaskDependencyPkBlockerTaskId(pub super::task::TaskId);
+pub struct TaskDependencyPkBlockerTaskId(pub super::task::TaskPk);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, DeriveValueType)]
 #[sea_orm(try_from_u64)]
-pub struct TaskDependencyPkBlockedTaskId(pub super::task::TaskId);
+pub struct TaskDependencyPkBlockedTaskId(pub super::task::TaskPk);
 
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
 #[sea_orm(table_name = "task_dependency")]
