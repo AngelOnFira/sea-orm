@@ -486,10 +486,10 @@ impl EntityWriter {
     }
 
     /// Build the `(table, column) -> AliasIdent` lookup of PK newtype
-    /// aliases. See `PR.md` ("Naming rules") for the full naming
-    /// convention; in short: unary PK is `<TableCamel>Pk`, composite
-    /// PK columns are `<TableCamel><ColumnCamel>` (with an `IdId`
-    /// collapse).
+    /// aliases. Naming: unary PK is `<TableCamel>Pk`; composite PK
+    /// columns are `<TableCamel><ColumnCamel>` with a one-step
+    /// collapse if the combined name would end in `IdId`
+    /// (e.g. table `cake_id` column `id` -> `CakeId`, not `CakeIdId`).
     fn build_pk_newtype_index(entities: &[Entity]) -> PkNewtypeIndex {
         let mut index = PkNewtypeIndex::new();
         for entity in entities {
@@ -554,8 +554,8 @@ impl EntityWriter {
     }
 
     /// Emit type aliases and role-wrapper structs for an entity's PK
-    /// columns. See `Column::get_rs_type` for the resolution rule and
-    /// `PR.md` for the full naming convention.
+    /// columns. See `Column::get_rs_type` for the resolution rule that
+    /// downstream call sites use to interpret these declarations.
     fn gen_pk_newtype_decls(entity: &Entity, opt: &ColumnOption) -> Vec<TokenStream> {
         use crate::entity::column::PkNewtypeContext;
         let Some(ctx) = opt.pk_newtype.as_ref() else {

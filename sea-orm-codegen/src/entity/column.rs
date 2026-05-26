@@ -160,7 +160,8 @@ impl Column {
         //          pub post_id: super::post::PostPk,
         //
         //      Multi-parent FK columns (`self.refs.len() > 1`) deliberately
-        //      fall through to step 4. See `PR.md` for the rationale.
+        //      fall through to step 4: no single typed alias can faithfully
+        //      represent a column whose value is an id of either parent.
         //
         //   3. Own-PK alias. The column is this entity's primary key (or part
         //      of a composite PK); emit the local alias. Example:
