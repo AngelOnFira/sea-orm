@@ -47,6 +47,6 @@ mod post {
 }
 
 fn main() {
-    // Cross-entity ID confusion — must not compile.
+    // Cross-entity ID confusion, must not compile.
     let _ = user::Entity::find_by_id(post::PostId::new(1));
 }

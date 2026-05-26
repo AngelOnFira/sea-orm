@@ -46,7 +46,7 @@ impl by design.
 
 ## The pieces
 
-### 1. `sea_orm::Id<E, T>` — phantom-typed PK wrapper
+### 1. `sea_orm::Id<E, T>`, phantom-typed PK wrapper
 
 Located at `src/entity/id.rs`. Roughly:
 
@@ -129,7 +129,7 @@ column gets a per-column wrapper struct named
 `<OwnTableCamel>Pk<ColumnCamel>`. The wrapper wraps the parent's PK
 alias and carries `#[derive(DeriveValueType)]`.
 
-Example — `user_follower` table with `user_id, follower_id` both
+Example, `user_follower` table with `user_id, follower_id` both
 referencing `user.id`:
 
 ```rust
@@ -190,7 +190,7 @@ The fallback. Emits the inferred Rust scalar (`i32`, `String`, ...)
 as if `--with-pk-newtypes` weren't enabled. Reached when:
 
 - the column has **more than one** FK back-reference (multi-parent
-  FK — see "deliberate fallback" below)
+  FK, see "deliberate fallback" below)
 - the column has no FK back-references AND isn't a PK column
 - the parent referenced by a single-FK column has no PK alias
 
@@ -228,7 +228,7 @@ disambiguation could be added later but is out of scope here.
 ## Deliberate fallback to scalar: multi-parent FK columns
 
 When a single SQL column is FK-constrained against more than one
-parent (legal SQL — appears in migration shims and audit
+parent (legal SQL, appears in migration shims and audit
 patterns), codegen opts out of newtyping for that column:
 
 ```sql
@@ -254,7 +254,7 @@ silently would lie about the schema. A sum type
 force pattern-matching at every read site for what is usually a
 transient migration pattern.
 
-The `Relation` enum still emits both BelongsTo arms — only the
+The `Relation` enum still emits both BelongsTo arms, only the
 column field type degrades to scalar. Could be revisited as a
 `Either<A, B>`-style API later if a safe path appears.
 
@@ -336,7 +336,7 @@ unrelated to this PR.
 ## CI integration
 
 `examples/basic_typed_pk/` is added to the existing `examples`
-matrix in `.github/workflows/rust.yml` — one line, no new job. Uses
+matrix in `.github/workflows/rust.yml`, one line, no new job. Uses
 the same `cargo test --manifest-path` invocation as every other
 example.
 

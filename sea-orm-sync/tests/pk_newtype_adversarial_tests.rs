@@ -13,7 +13,7 @@
 //!     DB round-trip; this is the in-memory serde counterpart).
 //!
 //! Two minimal local entities (`post`, `user`) keep this file self-
-//! contained — the snowflake_chat fixture uses `DeriveValueType` newtype
+//! contained, the snowflake_chat fixture uses `DeriveValueType` newtype
 //! wrappers, which exhibit different layout/serde guarantees than the
 //! `Id<E, T>` alias path under test here.
 
@@ -152,7 +152,7 @@ mod serde_shape {
 }
 
 /// `Id<E, String>` accepts a `String` payload and survives a serde
-/// round-trip. The phantom entity here is `user::Entity` — only the
+/// round-trip. The phantom entity here is `user::Entity`, only the
 /// inner-`T` behaviour is under test.
 #[cfg(feature = "with-json")]
 #[test]

@@ -18,8 +18,8 @@
 //!    harness asserts each substring appears in the captured stderr.
 //!    Substrings are our own prose (the
 //!    `#[diagnostic::on_unimplemented]` messages) or our own type
-//!    names — both stable across rustc upgrades. This layer catches
-//!    "must-fail invariant held but for the wrong reason" — e.g. the
+//!    names, both stable across rustc upgrades. This layer catches
+//!    "must-fail invariant held but for the wrong reason", e.g. the
 //!    fixture is failing on a syntax error rather than the trait-bound
 //!    error we wanted.
 //!
@@ -41,7 +41,7 @@ fn pk_safety() {
     // Scope it so the .stderr files are populated before we read them
     // for the substring layer below. Trybuild will panic in drop if a
     // fixture compiles when it shouldn't, OR if a fixture's captured
-    // stderr drifts from the committed snapshot — both load-bearing.
+    // stderr drifts from the committed snapshot, both load-bearing.
     {
         let t = trybuild::TestCases::new();
         t.compile_fail(format!("{FIXTURE_DIR}/*.rs"));
@@ -70,7 +70,7 @@ fn pk_safety() {
             Ok(s) => s,
             Err(e) => {
                 failures.push(format!(
-                    "{}: could not read {} — trybuild should have produced \
+                    "{}: could not read {}, trybuild should have produced \
                      it (TRYBUILD=overwrite). I/O error: {e}",
                     fixture.display(),
                     stderr_path.display()

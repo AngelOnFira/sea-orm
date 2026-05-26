@@ -56,7 +56,7 @@ pub trait PrimaryKeyTrait: IdenStatic + Iterable {
     /// 2. Composite primary keys (more than one `primary_key` column) always
     ///    return `false`.
     /// 3. Otherwise the default is resolved at trait-resolution time via
-    ///    [`crate::PkAutoIncrementHint`] on the column's type — integer
+    ///    [`crate::PkAutoIncrementHint`] on the column's type, integer
     ///    primitives default to `true`, `String` / `Uuid` / `Vec<u8>` default
     ///    to `false`, and `DeriveValueType` wrappers delegate to their inner
     ///    type (so `RoleId(pub i64)` → `true`, `Token(pub String)` → `false`).

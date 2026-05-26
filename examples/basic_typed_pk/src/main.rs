@@ -13,7 +13,7 @@ async fn main() -> Result<(), DbErr> {
     create_schema(&db).await?;
 
     // Create two users. `.insert(...)` returns the persisted Model with
-    // a typed `UserPk` already populated — no raw `i64` ever appears.
+    // a typed `UserPk` already populated, no raw `i64` ever appears.
     let alice = user::ActiveModel {
         name: Set("Alice".to_string()),
         email: Set("alice@example.com".to_string()),
@@ -30,7 +30,7 @@ async fn main() -> Result<(), DbErr> {
     .await?;
 
     // Project + membership. `add_project_member` takes
-    // `(ProjectId, UserId, String)` — swapping the two id args would be
+    // `(ProjectId, UserId, String)`, swapping the two id args would be
     // a compile error.
     let audit = project::ActiveModel {
         name: Set("ATO compliance audit".to_string()),
@@ -64,7 +64,7 @@ async fn main() -> Result<(), DbErr> {
     println!("draft policy: {draft_policy:?}");
 
     // Subtask via self-ref. `parent_task_id: Set(Some(parent))` carries
-    // a typed `TaskPk` — there's no way to accidentally pass a UserId.
+    // a typed `TaskPk`, there's no way to accidentally pass a UserId.
     let outline =
         operations::create_subtask(&db, audit.id, draft_policy.id, bob.id, "Outline".to_string())
             .await?;
@@ -83,7 +83,7 @@ async fn main() -> Result<(), DbErr> {
 
     // Role-wrapped junction. Inside `add_blocker`, the two typed args
     // are funneled through `TaskDependencyPkBlockerTaskId` and
-    // `TaskDependencyPkBlockedTaskId` — swapping the bodies would be
+    // `TaskDependencyPkBlockedTaskId`, swapping the bodies would be
     // a compile error at the insert site.
     operations::add_blocker(&db, draft_policy.id, internal_review.id).await?;
     println!("blocker recorded: \"draft policy\" blocks \"internal review\"");
@@ -92,7 +92,7 @@ async fn main() -> Result<(), DbErr> {
     let outline = operations::reassign_task(&db, outline.id, alice.id).await?;
     println!("outline reassigned to alice: {outline:?}");
 
-    // Typed PK in `.filter()` position — a different code path than
+    // Typed PK in `.filter()` position, a different code path than
     // `find_by_id`.
     let bobs_tasks = operations::tasks_assigned_to(&db, bob.id).await?;
     println!("tasks assigned to bob ({} total):", bobs_tasks.len());

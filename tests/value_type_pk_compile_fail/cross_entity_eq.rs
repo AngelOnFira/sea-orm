@@ -40,6 +40,6 @@ mod post {
 }
 
 fn main() {
-    // Direct equality across entities — must not compile.
+    // Direct equality across entities, must not compile.
     let _ = user::UserId::new(7) == post::PostId::new(7);
 }

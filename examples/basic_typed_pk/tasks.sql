@@ -51,7 +51,7 @@ CREATE TABLE project_member (
 );
 
 -- Self-ref via parent_task_id; two non-PK FKs to user (assignee +
--- reviewer). Both user FKs share `UserId` — they are NOT role-wrapped
+-- reviewer). Both user FKs share `UserId`, they are NOT role-wrapped
 -- (role wrappers are PK-only by codegen design).
 CREATE TABLE task (
     id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,

@@ -147,7 +147,7 @@ pub fn array_type_expr(
 pub fn can_try_from_u64(field_type: &str) -> bool {
     // Types in this list impl `TryFromU64` directly (defined in
     // sea-orm itself). A `DeriveValueType` newtype wrapping one of
-    // them can therefore be used as a primary key — the generated
+    // them can therefore be used as a primary key, the generated
     // `TryFromU64` impl delegates to the inner type.
     matches!(
         field_type,

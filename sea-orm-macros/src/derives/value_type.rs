@@ -170,7 +170,7 @@ impl DeriveValueTypeStruct {
 
         let try_from_u64_impl = if self.can_try_from_u64 {
             // Delegate to the inner type's `TryFromU64` impl so this works
-            // for any wrapped type that itself impls `TryFromU64` — including
+            // for any wrapped type that itself impls `TryFromU64`, including
             // `Uuid` (returns `Err(ConvertFromU64)`) and `String` (returns
             // the digit string), not just integer primitives.
             quote!(

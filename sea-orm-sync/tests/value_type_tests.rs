@@ -223,21 +223,21 @@ pub fn conversion_test() {
 pub fn auto_increment_test() {
     use sea_orm::PrimaryKeyTrait;
 
-    // MyInteger(i32) — DeriveValueType propagates PkAutoIncrementHint
+    // MyInteger(i32), DeriveValueType propagates PkAutoIncrementHint
     // through the inner i32 → defaults to true.
     assert!(
         <value_type_pk::PrimaryKey as PrimaryKeyTrait>::auto_increment(),
         "MyInteger(i32) newtype PK should resolve to auto_increment = true"
     );
 
-    // Token(String) — same propagation, but inner is String → false.
+    // Token(String), same propagation, but inner is String → false.
     // No explicit annotation on the entity is required.
     assert!(
         !<value_type_token_pk::PrimaryKey as PrimaryKeyTrait>::auto_increment(),
         "Token(String) PK should resolve to auto_increment = false via PkAutoIncrementHint"
     );
 
-    // `Uuid::try_from_u64` returns Err — confirm the newtype delegates and
+    // `Uuid::try_from_u64` returns Err, confirm the newtype delegates and
     // surfaces the same error variant (not a `TryFromIntError`).
     #[cfg(feature = "with-uuid")]
     {
@@ -247,7 +247,7 @@ pub fn auto_increment_test() {
         assert!(matches!(err, DbErr::ConvertFromU64(_)));
     }
 
-    // `String::try_from_u64` returns Ok("n") — confirm the newtype delegates.
+    // `String::try_from_u64` returns Ok("n"), confirm the newtype delegates.
     {
         use sea_orm::TryFromU64;
         let token = Token::try_from_u64(42).unwrap();

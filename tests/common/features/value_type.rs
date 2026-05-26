@@ -55,7 +55,7 @@ pub mod value_type_pk {
     impl ActiveModelBehavior for ActiveModel {}
 }
 
-/// String-backed newtype PK — exercises `PkAutoIncrementHint` resolving
+/// String-backed newtype PK, exercises `PkAutoIncrementHint` resolving
 /// through `DeriveValueType` to `false`.
 pub mod value_type_token_pk {
     use super::*;

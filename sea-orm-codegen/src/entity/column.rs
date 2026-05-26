@@ -13,10 +13,6 @@ use std::rc::Rc;
 pub type PkNewtypeIndex = HashMap<(String, String), Ident>;
 
 /// A single FK back-reference: this column points at `table.column`.
-/// A column may have more than one such ref if the same SQL column is
-/// constrained against multiple parents — see the
-/// `multi_fk_same_column_records_both_backrefs` test in
-/// `sea-orm-codegen/src/entity/transformer.rs` for an exercised example.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ColumnRef {
     pub table: String,
@@ -31,10 +27,12 @@ pub struct Column {
     pub(crate) not_null: bool,
     pub(crate) unique: bool,
     pub(crate) unique_key: Option<String>,
-    /// FK back-references — `(parent_table, parent_column)` pairs for every
+    /// FK back-references `(parent_table, parent_column)` pairs for every
     /// `BelongsTo` relation that includes this column. Empty for non-FK
     /// columns. Populated by `EntityTransformer` from the schema's foreign
-    /// key constraints. Multiple entries are legal (a column can be
+    /// key constraints.
+    ///
+    /// Note: Multiple entries are legal (a column can be
     /// constrained against multiple parents); under
     /// `--with-pk-newtypes`, codegen opts out of newtyping for such
     /// columns and emits the raw scalar instead. See
@@ -159,25 +157,17 @@ impl Column {
         //      parent's alias (`super::ref::Alias` cross-module, bare `Alias`
         //      if self-referencing). Example:
         //
-        //          pub post_id: super::post::PostId,
+        //          pub post_id: super::post::PostPk,
         //
-        //      If `self.refs.len() > 1` — the same SQL column is constrained
-        //      against multiple parents — codegen opts out of newtyping for
-        //      this column and falls through to the raw scalar (step 4). No
-        //      single typed alias can faithfully represent a column that may
-        //      hold either parent's id; picking one parent silently would lie
-        //      about the schema, and a sum type would force pattern-matching
-        //      at every read site for what is usually a transient migration
-        //      shape. Documented limitation, could be revisited later if a
-        //      safe path appears.
+        //      Multi-parent FK columns (`self.refs.len() > 1`) deliberately
+        //      fall through to step 4. See `PR.md` for the rationale.
         //
         //   3. Own-PK alias. The column is this entity's primary key (or part
         //      of a composite PK); emit the local alias. Example:
         //
-        //          pub id: CakeId,
+        //          pub id: CakePk,
         //
-        //   4. Raw scalar. Not a PK, not a single-parent FK, no wrapper
-        //      applies. Fall through to the inferred Rust scalar (`i32`,
+        //   4. Raw scalar. Fall through to the inferred Rust scalar (`i32`,
         //      `String`, ...) as if `--with-pk-newtypes` weren't on.
         let inner: TokenStream = if let Some(ctx) = opt.pk_newtype.as_ref() {
             let current_table = ctx.current_table.as_str();
@@ -187,7 +177,7 @@ impl Column {
             if let Some(ident) = ctx.role_wrappers.get(&key) {
                 quote! { #ident }
             }
-            // Step 2: FK to parent's alias (single ref only — multi-parent
+            // Step 2: FK to parent's alias (single ref only, multi-parent
             // FKs fall through to step 4).
             else if self.refs.len() == 1 {
                 let first_ref = &self.refs[0];
@@ -196,7 +186,7 @@ impl Column {
                     .get(&(first_ref.table.clone(), first_ref.column.clone()))
                 {
                     if first_ref.table == current_table {
-                        // Self-referencing FK — emit local name (no super::).
+                        // Self-referencing FK, emit local name (no super::).
                         quote! { #ident }
                     } else {
                         let module = format_ident!(

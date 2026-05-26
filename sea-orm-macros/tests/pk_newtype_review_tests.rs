@@ -1,12 +1,12 @@
 //! Adversarial tests for the PK-newtype branch.
 //!
-//! Test 4: `auto_increment` heuristic regression — a type alias to `i32`
+//! Test 4: `auto_increment` heuristic regression, a type alias to `i32`
 //!         is *not* in the textual allowlist `AUTO_INCRE_INTEGER_TYPES`,
 //!         so the macro defaults `auto_increment = false` even though
 //!         the underlying SQL column is a plain `i32`.
 //!
 //! Test 5: `DeriveValueType` over an inner type that does NOT impl
-//!         `TryFromU64` must still compile — no spurious trait impl.
+//!         `TryFromU64` must still compile, no spurious trait impl.
 
 use sea_orm::entity::prelude::*;
 
@@ -37,7 +37,7 @@ mod alias_pk {
 // Auto-increment heuristic: the macro now defaults to `true` for any
 // PK whose textual type does NOT end in `String` or `Uuid`. A type
 // alias to `i32` (or hand-written newtype wrapper) falls through the
-// suffix denylist and ends up correctly auto-incrementing — matching
+// suffix denylist and ends up correctly auto-incrementing, matching
 // what users expect from a `pub id: <SomeIdAlias>` column.
 #[test]
 fn alias_pk_should_still_be_auto_increment() {

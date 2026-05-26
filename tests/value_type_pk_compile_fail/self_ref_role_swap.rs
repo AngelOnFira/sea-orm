@@ -1,6 +1,6 @@
 //! Self-ref junction tables (where 2+ FK columns point at the same parent)
 //! get per-column "role wrapper" structs around the parent's PK alias.
-//! This makes positional swaps fail to compile — a real-world swap bug
+//! This makes positional swaps fail to compile, a real-world swap bug
 //! that no design with shared types could catch.
 
 // expect-error: mismatched types

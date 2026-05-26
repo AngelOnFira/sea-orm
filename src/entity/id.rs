@@ -3,12 +3,12 @@
 //! `Id<E, T>` wraps a primary-key value of underlying type `T` and tags it
 //! with the entity `E` at the type level. Two `Id` types with different
 //! entity tags are never inter-convertible, so the compiler rejects
-//! cross-entity ID confusion at use sites — e.g. passing a
+//! cross-entity ID confusion at use sites, e.g. passing a
 //! `Id<post::Entity, _>` to `user::Entity::find_by_id` is a type error.
 //!
 //! ## Type parameters
 //!
-//! `T` is always the raw scalar — `Id<E, T>::value: T`. Keeping the scalar
+//! `T` is always the raw scalar, `Id<E, T>::value: T`. Keeping the scalar
 //! as an explicit type parameter (rather than projecting it through an
 //! associated type on `E`) keeps `PrimaryKey::ValueType = Id<E, T>` from
 //! becoming infinitely recursive (`Id<E>::Inner = Id<E>::Inner = …`),
@@ -29,7 +29,7 @@
 //!     pub name: String,
 //! }
 //!
-//! // Construction is explicit — `Id::new` (no `From<i32>` blanket):
+//! // Construction is explicit, `Id::new` (no `From<i32>` blanket):
 //! let id = CakeId::new(7);
 //!
 //! // Queries use the typed handle:
@@ -64,7 +64,7 @@ use std::marker::PhantomData;
 
 /// Phantom-typed wrapper around a primary-key value.
 ///
-/// `E` is the entity this id belongs to (a marker — never stored at
+/// `E` is the entity this id belongs to (a marker, never stored at
 /// runtime). `T` is the raw stored value:
 /// - For unary PKs, the scalar type (`i32`, `Uuid`, `String`, …).
 /// - For composite PKs, a tuple of the typed components
@@ -77,7 +77,7 @@ pub struct Id<E: EntityTrait, T> {
     pub value: T,
     // `PhantomData<fn(E) -> E>` makes `E` invariant: the function-pointer
     // type has `E` in both contravariant (parameter) and covariant (return)
-    // position, which combine to invariant. This is what we want — the
+    // position, which combine to invariant. This is what we want, the
     // compiler must never widen an `Id<A, _>` to an `Id<B, _>` even if A
     // and B are related. `fn() -> E` alone would be covariant; `fn(E)`
     // alone would be contravariant; the combined form is the canonical
@@ -89,7 +89,7 @@ pub struct Id<E: EntityTrait, T> {
 
 impl<E: EntityTrait, T> Id<E, T> {
     /// Wrap a raw value as a typed entity ID. This is the only construction
-    /// path — there is no `From<T>` blanket impl, which is what gives
+    /// path, there is no `From<T>` blanket impl, which is what gives
     /// `Id<E, T>` its type-safety contract.
     pub const fn new(value: T) -> Self {
         Self {
@@ -118,12 +118,12 @@ impl<E: EntityTrait, T: Copy> Copy for Id<E, T> {}
 impl<E: EntityTrait, T: fmt::Debug> fmt::Debug for Id<E, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Include the entity tag so `Id<post::Entity, _>(7)` and
-        // `Id<user::Entity, _>(7)` don't look identical in logs — that
+        // `Id<user::Entity, _>(7)` don't look identical in logs, that
         // defeats the entire reason this wrapper exists.
         //
         // Every entity struct is named `Entity` by convention, so the
         // disambiguating part is the module that contains it. We render
-        // `<parent_module>::<EntityName>` — the last two `::`-segments
+        // `<parent_module>::<EntityName>`, the last two `::`-segments
         // of `std::any::type_name::<E>()`. Full paths are too verbose
         // for log lines; the trailing two segments preserve the
         // disambiguation while staying readable.
@@ -166,8 +166,8 @@ impl<E: EntityTrait, T: fmt::Display> fmt::Display for Id<E, T> {
 // `Into<Value>` (for unary `T`) → bridges to sea-query's blanket
 // `impl<V: Into<Value>> From<V> for ValueTuple`, which auto-derives
 // `Id<E, T>: IntoValueTuple` (the supertrait of FromValueTuple etc.).
-// Composite PKs don't use `Id<E, tuple>` at the value-binding level —
-// each composite component is itself a unary `Id<parent, scalar>` and
+// Composite PKs don't use `Id<E, tuple>` at the value-binding level.
+// Each composite component is itself a unary `Id<parent, scalar>` and
 // the tuple is just `(CakeId, FillingId)`.
 
 impl<E: EntityTrait, T> From<Id<E, T>> for Value
@@ -182,7 +182,7 @@ where
 // `FromValueTuple` is provided automatically by sea-query's blanket
 // `impl<V: Into<Value> + ValueType> FromValueTuple for V` once we impl
 // `Into<Value>` (above) and `ValueType` (below). For composite `T` neither
-// bound is met and the blanket doesn't fire — that's intentional, as we
+// bound is met and the blanket doesn't fire, that's intentional, as we
 // never use `Id<E, tuple>` at the value-binding level.
 
 // `TryGetable` (single-column read). When `T: TryGetable`, `Id<E, T>` reads
@@ -191,8 +191,8 @@ where
 // and makes tuples of `Id<E, T>` impl `TryGetableMany` via the per-arity
 // macro, which is what composite PKs need.
 //
-// Note: `Id<E, T>` does NOT impl `TryGetable` when `T` is itself a tuple —
-// the trait would need column-position arithmetic the macros don't provide
+// Note: `Id<E, T>` does NOT impl `TryGetable` when `T` is itself a tuple.
+// The trait would need column-position arithmetic the macros don't provide
 // for nested wrappers. Composite PKs use tuples of unary `Id<E, scalar>`,
 // not `Id<E, tuple>`, so this restriction is fine in practice.
 impl<E: EntityTrait, T: TryGetable> TryGetable for Id<E, T> {
@@ -213,7 +213,7 @@ impl<E: EntityTrait, T: TryFromU64> TryFromU64 for Id<E, T> {
 
 // `sea_query::ValueType` so the `DeriveEntityModel` macro can call
 // `<CakeId as ValueType>::column_type()` to determine the SQL column type.
-// Only available when `T: ValueType` — i.e. T is a single scalar, not a
+// Only available when `T: ValueType`, i.e. T is a single scalar, not a
 // composite tuple. For composite PKs the macro asks each individual column
 // for its type, and each column's `T` is a single scalar.
 impl<E: EntityTrait, T: ValueType> ValueType for Id<E, T> {
@@ -245,7 +245,7 @@ impl<E: EntityTrait, T: Nullable> Nullable for Id<E, T> {
 // === Construction note ======================================================
 //
 // `Id::new(value)` is the only construction path. We deliberately do NOT
-// provide `impl<E, T> From<T> for Id<E, T>` — that would re-open the safety
+// provide `impl<E, T> From<T> for Id<E, T>`, that would re-open the safety
 // hole the type is designed to prevent.
 
 // === FindByIdArg ============================================================
@@ -253,14 +253,14 @@ impl<E: EntityTrait, T: Nullable> Nullable for Id<E, T> {
 // `find_by_id` / `filter_by_id` accept anything convertible to the entity's
 // primary-key value type. We could bound that directly with `Into`, but doing
 // so makes the compiler's "this argument is wrong" diagnostic incomprehensible
-// — it reads something like
+//, it reads something like
 //   `the trait bound `Id<user::Entity, i32>: From<Id<post::Entity, i32>>`
 //    is not satisfied`,
 // burying the two entity types inside generic args of `Into`.
 //
 // `FindByIdArg<E>` is a thin sea-orm-owned wrapper around that same `Into`
 // bound. It exists solely so we can attach `#[diagnostic::on_unimplemented]`
-// to it — diagnostics can't be attached to `Into` (a std trait). The blanket
+// to it, diagnostics can't be attached to `Into` (a std trait). The blanket
 // impl forwards through `Into`, so every existing call site still works
 // without change. When the bound *fails*, the user sees a message that names
 // the entity and the argument type directly.
@@ -271,7 +271,7 @@ impl<E: EntityTrait, T: Nullable> Nullable for Id<E, T> {
 ///
 /// Implemented for every `T` that converts into `E`'s primary-key value type
 /// via `Into`. This trait exists to provide a better compiler error than the
-/// raw `Into` bound when the argument doesn't match — see the module docs.
+/// raw `Into` bound when the argument doesn't match, see the module docs.
 #[diagnostic::on_unimplemented(
     message = "`{Self}` cannot be used as a primary-key argument for `{E}`",
     label = "expected `{E}`'s `PrimaryKey::ValueType` (or something convertible to it), got `{Self}`",
@@ -285,7 +285,7 @@ pub trait FindByIdArg<E: EntityTrait>: Sized {
 // `do_not_recommend` (stable 1.85) tells rustc not to surface this blanket impl
 // in error messages when its where-clause fails. Without it, the user sees a
 // confusing message about `From<Id<post::Entity, _>>` not being implemented
-// for `Id<user::Entity, _>` — the deeper sub-bound — instead of the
+// for `Id<user::Entity, _>`, the deeper sub-bound, instead of the
 // `on_unimplemented` message on `FindByIdArg` itself.
 #[diagnostic::do_not_recommend]
 impl<E: EntityTrait, T> FindByIdArg<E> for T

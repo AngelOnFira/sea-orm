@@ -83,7 +83,7 @@ pub enum BannerVersion {
 /// wrapper to foreign-key column types.
 #[derive(Debug, Default, PartialEq, Eq, Copy, Clone)]
 pub enum PkNewtypeFormat {
-    /// Default — emit raw scalar types for primary keys.
+    /// Default, emit raw scalar types for primary keys.
     #[default]
     None,
     /// Emit `pub struct <Table>Id(pub <inner>);` inline above the
@@ -486,14 +486,10 @@ impl EntityWriter {
     }
 
     /// Build the `(table, column) -> AliasIdent` lookup of PK newtype
-    /// aliases. Naming rule:
-    /// - Unary PK: `<TableCamel>Pk`. Consistent across every entity and
-    ///   never collides with the parent table's alias.
-    /// - Composite PK: `<TableCamel><ColumnCamel>`, always prefixed to
-    ///   avoid bare-`Id` aliases. If the column name camel-cases to a
-    ///   value already ending in `Id` and the resulting combined name
-    ///   would end in `IdId`, one suffix is stripped
-    ///   (e.g. table `cake_id`, col `id` -> `CakeId`, not `CakeIdId`).
+    /// aliases. See `PR.md` ("Naming rules") for the full naming
+    /// convention; in short: unary PK is `<TableCamel>Pk`, composite
+    /// PK columns are `<TableCamel><ColumnCamel>` (with an `IdId`
+    /// collapse).
     fn build_pk_newtype_index(entities: &[Entity]) -> PkNewtypeIndex {
         let mut index = PkNewtypeIndex::new();
         for entity in entities {
@@ -517,30 +513,11 @@ impl EntityWriter {
         index
     }
 
-    /// Build the `(own_table, fk_column) -> RoleWrapperIdent` lookup for
-    /// self-referential and many-FK-to-same-parent junction tables.
-    ///
-    /// When a table has more than one column FK-referencing the same
-    /// parent table, each of those columns gets a distinct standalone
-    /// wrapper struct so the columns are type-distinct even though they
-    /// share a parent. Wrappers are named
-    /// `<TableCamel>Pk<ColumnCamel>` — verbose but guaranteed
-    /// collision-free across tables and columns.
-    ///
-    /// Example: `user_follower` has two columns
-    /// (`user_id`, `follower_id`) both referencing `user.id`. Codegen
-    /// emits:
-    ///
-    /// ```ignore
-    /// pub struct UserFollowerPkUserId(pub super::user::UserPk);
-    /// pub struct UserFollowerPkFollowerId(pub super::user::UserPk);
-    /// ```
-    ///
-    /// so writing the two PK columns in the wrong positional order is
-    /// a type error.
-    ///
-    /// Currently restricted to PK columns; non-PK role disambiguation
-    /// could be added later.
+    /// Build the `(own_table, fk_column) -> RoleWrapperIdent` lookup
+    /// for junction tables whose PK has more than one column FK-
+    /// referencing the same parent. Wrappers are named
+    /// `<OwnTableCamel>Pk<ColumnCamel>`. PK columns only; non-PK role
+    /// disambiguation is out of scope.
     fn build_role_wrapper_index(entities: &[Entity]) -> PkNewtypeIndex {
         let mut index = PkNewtypeIndex::new();
         for entity in entities {
@@ -576,17 +553,9 @@ impl EntityWriter {
         index
     }
 
-    /// Emit primary-key declarations for an entity. Two kinds of output:
-    ///
-    /// - Type aliases for entity's own PK columns that aren't FKs to other
-    ///   entities: `pub type CakeId = sea_orm::Id<Entity, i32>;`.
-    /// - Standalone wrapper structs for role-wrapper PK columns (self-ref
-    ///   junctions): `pub struct UserFollowerPkUserId(pub super::user::UserId);`
-    ///   with `DeriveValueType`.
-    ///
-    /// PK columns that are FKs to other entities and aren't role wrappers
-    /// produce NO declaration — they reuse the parent's alias directly via
-    /// `Column::get_rs_type` resolution.
+    /// Emit type aliases and role-wrapper structs for an entity's PK
+    /// columns. See `Column::get_rs_type` for the resolution rule and
+    /// `PR.md` for the full naming convention.
     fn gen_pk_newtype_decls(entity: &Entity, opt: &ColumnOption) -> Vec<TokenStream> {
         use crate::entity::column::PkNewtypeContext;
         let Some(ctx) = opt.pk_newtype.as_ref() else {
@@ -603,7 +572,7 @@ impl EntityWriter {
         // For role wrappers we want the parent's alias path, so we synthesize
         // a context with the same `pk_aliases` but an empty `role_wrappers`
         // map and a `current_table` that intentionally won't match anything
-        // in `pk_aliases` — that way `get_rs_type` falls through to the FK
+        // in `pk_aliases`, that way `get_rs_type` falls through to the FK
         // resolution branch (step 2) and emits `super::ref::ParentAlias`
         // rather than the local own-PK alias (step 3).
         let parent_resolve_opt = ColumnOption {
@@ -644,7 +613,7 @@ impl EntityWriter {
                 continue;
             }
 
-            // FK PK without role-wrapper status? No local emission — the
+            // FK PK without role-wrapper status? No local emission, the
             // column resolves to the parent's alias via Column::get_rs_type.
             if !column.refs.is_empty() {
                 continue;
@@ -3754,7 +3723,7 @@ mod tests {
         let child_norm: String = child.content.split_whitespace().collect();
 
         // Multi-parent FK -> raw scalar at the field-type level.
-        // (The Relation enum still references both parents — that's
+        // (The Relation enum still references both parents, that's
         // independent of the column type emission.)
         assert!(
             child_norm.contains("pubuser_id:i32"),

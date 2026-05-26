@@ -127,14 +127,7 @@ impl EntityTransformer {
             // Populate per-column FK back-references from the relations.
             // FK columns will carry `refs: Vec<ColumnRef>` of
             // `(parent_table, parent_column)` so downstream codegen can
-            // resolve the referenced PK type. A column may appear in
-            // multiple BelongsTo relations (legal SQL when the same
-            // column is constrained against multiple parents); all
-            // back-refs are recorded here. Under `--with-pk-newtypes`,
-            // multi-parent FK columns fall back to the raw scalar
-            // because no single typed alias can faithfully represent
-            // "this column's value is an id of either parent." See
-            // `Column::get_rs_type` for the resolution rule.
+            // resolve the referenced PK type.
             for rel in relations.iter() {
                 if !matches!(rel.rel_type, RelationType::BelongsTo) {
                     continue;
@@ -486,7 +479,7 @@ mod tests {
         assert_eq!(parent_id_col.refs[0].table, "parent");
         assert_eq!(parent_id_col.refs[0].column, "id");
 
-        // The PK column itself is not an FK — refs must stay empty.
+        // The PK column itself is not an FK, refs must stay empty.
         let id_col = child
             .columns
             .iter()

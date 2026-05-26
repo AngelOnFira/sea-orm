@@ -7,14 +7,14 @@
 //!
 //! Each function covers a distinct typed-PK call shape:
 //!
-//!   - `reassign_task` — typed PK threaded through an `UPDATE` and
+//!   - `reassign_task`, typed PK threaded through an `UPDATE` and
 //!     cross-entity argument typing (`TaskPk` and `UserPk`).
-//!   - `create_subtask` — self-ref `parent_task_id: Option<TaskPk>`
+//!   - `create_subtask`, self-ref `parent_task_id: Option<TaskPk>`
 //!     plus four typed PKs in a row.
-//!   - `add_blocker` — role-wrapped junction insert (the only place
+//!   - `add_blocker`, role-wrapped junction insert (the only place
 //!     the `TaskDependencyPk*` wrappers are user-visible).
-//!   - `add_project_member` — composite-PK insert with typed components.
-//!   - `tasks_assigned_to` — typed PK as a value passed into
+//!   - `add_project_member`, composite-PK insert with typed components.
+//!   - `tasks_assigned_to`, typed PK as a value passed into
 //!     `Column::AssigneeId.eq(...)` for a filter.
 
 use crate::entity::{project, project_member, task, task_dependency, user};
