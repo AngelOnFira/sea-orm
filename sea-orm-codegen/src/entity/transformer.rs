@@ -127,12 +127,14 @@ impl EntityTransformer {
             // Populate per-column FK back-references from the relations.
             // FK columns will carry `refs: Vec<ColumnRef>` of
             // `(parent_table, parent_column)` so downstream codegen can
-            // resolve the referenced PK type(s). A column may appear in
+            // resolve the referenced PK type. A column may appear in
             // multiple BelongsTo relations (legal SQL when the same
-            // column is constrained against multiple parents), in which
-            // case all back-refs are recorded; under
-            // `--with-pk-newtypes` the codegen picks the first one and
-            // documents the ambiguity.
+            // column is constrained against multiple parents); all
+            // back-refs are recorded here. Under `--with-pk-newtypes`,
+            // multi-parent FK columns fall back to the raw scalar
+            // because no single typed alias can faithfully represent
+            // "this column's value is an id of either parent." See
+            // `Column::get_rs_type` for the resolution rule.
             for rel in relations.iter() {
                 if !matches!(rel.rel_type, RelationType::BelongsTo) {
                     continue;
@@ -499,8 +501,14 @@ mod tests {
     fn multi_fk_same_column_records_both_backrefs() -> Result<(), Box<dyn Error>> {
         // The same SQL column (`child.user_id`) is constrained against two
         // different parents. `Column::refs` is a `Vec<ColumnRef>`, so both
-        // back-references survive the transform and are available to
-        // `--with-pk-newtypes` codegen.
+        // back-references survive the transform.
+        //
+        // Downstream behavior under `--with-pk-newtypes`: the writer
+        // deliberately does NOT pick one parent's alias. Instead it
+        // emits the raw scalar (`pub user_id: i32`) and the user keeps
+        // the column unwrapped. See
+        // `pk_newtypes_multi_parent_fk_falls_back_to_scalar` in
+        // `writer.rs` for the writer-level assertion.
         let users = Table::create()
             .table("users")
             .col(

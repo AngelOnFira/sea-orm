@@ -3665,4 +3665,106 @@ mod tests {
             fruit.content
         );
     }
+
+    /// When a single column is FK-constrained against more than one
+    /// parent, codegen deliberately opts out of newtyping for that
+    /// column and emits the raw scalar instead. The companion
+    /// transformer test `multi_fk_same_column_records_both_backrefs`
+    /// pins the multiple back-refs being recorded; this test pins the
+    /// downstream writer choice. See `Column::get_rs_type` for the
+    /// rationale (no single typed alias can faithfully represent a
+    /// column that may hold either parent's id).
+    #[test]
+    fn pk_newtypes_multi_parent_fk_falls_back_to_scalar() {
+        use crate::EntityTransformer;
+        use sea_query::{ColumnDef, ForeignKey, Table};
+
+        let users = Table::create()
+            .table("users")
+            .col(
+                ColumnDef::new("id")
+                    .integer()
+                    .not_null()
+                    .auto_increment()
+                    .primary_key(),
+            )
+            .to_owned();
+        let legacy_users = Table::create()
+            .table("legacy_users")
+            .col(
+                ColumnDef::new("id")
+                    .integer()
+                    .not_null()
+                    .auto_increment()
+                    .primary_key(),
+            )
+            .to_owned();
+        let child = Table::create()
+            .table("child")
+            .col(
+                ColumnDef::new("id")
+                    .integer()
+                    .not_null()
+                    .auto_increment()
+                    .primary_key(),
+            )
+            .col(ColumnDef::new("user_id").integer().not_null())
+            .foreign_key(
+                ForeignKey::create()
+                    .name("fk-child-user")
+                    .from("child", "user_id")
+                    .to("users", "id"),
+            )
+            .foreign_key(
+                ForeignKey::create()
+                    .name("fk-child-legacy_user")
+                    .from("child", "user_id")
+                    .to("legacy_users", "id"),
+            )
+            .to_owned();
+
+        let writer = EntityTransformer::transform(vec![users, legacy_users, child]).unwrap();
+        let context = EntityWriterContext::new(
+            EntityFormat::Compact,
+            WithPrelude::None,
+            WithSerde::None,
+            false,
+            DateTimeCrate::Chrono,
+            BigIntegerType::I64,
+            None,
+            false,
+            false,
+            false,
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            false,
+            true,
+            BannerVersion::Off,
+            PkNewtypeFormat::Inline,
+        );
+        let output = writer.generate(&context);
+        let child = output
+            .files
+            .iter()
+            .find(|f| f.name == "child.rs")
+            .expect("missing child.rs");
+        let child_norm: String = child.content.split_whitespace().collect();
+
+        // Multi-parent FK -> raw scalar at the field-type level.
+        // (The Relation enum still references both parents — that's
+        // independent of the column type emission.)
+        assert!(
+            child_norm.contains("pubuser_id:i32"),
+            "child.rs should type multi-parent FK `user_id` as raw `i32` (got:\n{})",
+            child.content
+        );
+        assert!(
+            !child_norm.contains("pubuser_id:super::"),
+            "child.rs should NOT type `user_id` as a parent alias (got:\n{})",
+            child.content
+        );
+    }
 }

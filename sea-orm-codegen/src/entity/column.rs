@@ -35,7 +35,10 @@ pub struct Column {
     /// `BelongsTo` relation that includes this column. Empty for non-FK
     /// columns. Populated by `EntityTransformer` from the schema's foreign
     /// key constraints. Multiple entries are legal (a column can be
-    /// constrained against multiple parents).
+    /// constrained against multiple parents); under
+    /// `--with-pk-newtypes`, codegen opts out of newtyping for such
+    /// columns and emits the raw scalar instead. See
+    /// `Column::get_rs_type`.
     pub(crate) refs: Vec<ColumnRef>,
 }
 
@@ -151,26 +154,31 @@ impl Column {
         //          pub user_id:     UserFollowerPkUserId,
         //          pub follower_id: UserFollowerPkFollowerId,
         //
-        //   2. FK to parent's PK alias. The column is a foreign key with at
-        //      least one back-reference recorded in `self.refs`; emit the
+        //   2. FK to parent's PK alias. The column is a foreign key with
+        //      exactly one back-reference recorded in `self.refs`; emit the
         //      parent's alias (`super::ref::Alias` cross-module, bare `Alias`
         //      if self-referencing). Example:
         //
         //          pub post_id: super::post::PostId,
         //
-        //      Note: A column may legally have more than one ref (the same SQL
-        //      column constrained against multiple parents). In that case we
-        //      pick `refs[0]`. TODO: Write example of what this looks like in a
-        //      schema.
+        //      If `self.refs.len() > 1` — the same SQL column is constrained
+        //      against multiple parents — codegen opts out of newtyping for
+        //      this column and falls through to the raw scalar (step 4). No
+        //      single typed alias can faithfully represent a column that may
+        //      hold either parent's id; picking one parent silently would lie
+        //      about the schema, and a sum type would force pattern-matching
+        //      at every read site for what is usually a transient migration
+        //      shape. Documented limitation, could be revisited later if a
+        //      safe path appears.
         //
         //   3. Own-PK alias. The column is this entity's primary key (or part
         //      of a composite PK); emit the local alias. Example:
         //
         //          pub id: CakeId,
         //
-        //   4. Raw scalar. Not a PK, not an FK, no wrapper applies. Fall
-        //      through to the inferred Rust scalar (`i32`, `String`, ...) as if
-        //      `--with-pk-newtypes` weren't on.
+        //   4. Raw scalar. Not a PK, not a single-parent FK, no wrapper
+        //      applies. Fall through to the inferred Rust scalar (`i32`,
+        //      `String`, ...) as if `--with-pk-newtypes` weren't on.
         let inner: TokenStream = if let Some(ctx) = opt.pk_newtype.as_ref() {
             let current_table = ctx.current_table.as_str();
             let key = (current_table.to_owned(), self.name.clone());
@@ -179,8 +187,10 @@ impl Column {
             if let Some(ident) = ctx.role_wrappers.get(&key) {
                 quote! { #ident }
             }
-            // Step 2: FK to parent's alias
-            else if let Some(first_ref) = self.refs.first() {
+            // Step 2: FK to parent's alias (single ref only — multi-parent
+            // FKs fall through to step 4).
+            else if self.refs.len() == 1 {
+                let first_ref = &self.refs[0];
                 if let Some(ident) = ctx
                     .pk_aliases
                     .get(&(first_ref.table.clone(), first_ref.column.clone()))
@@ -199,11 +209,15 @@ impl Column {
                     write_rs_type(&self.col_type, opt).parse().unwrap()
                 }
             }
-            // Step 3: own-PK alias
-            else if let Some(ident) = ctx.pk_aliases.get(&key) {
+            // Step 3: own-PK alias (only when the column has no FK back-refs;
+            // multi-FK columns skip both 2 and 3 and land on the raw scalar).
+            else if self.refs.is_empty()
+                && let Some(ident) = ctx.pk_aliases.get(&key)
+            {
                 quote! { #ident }
             }
-            // Step 4: raw scalar
+            // Step 4: raw scalar. Catches both "regular non-PK non-FK column"
+            // and "multi-parent FK that we deliberately don't newtype."
             else {
                 write_rs_type(&self.col_type, opt).parse().unwrap()
             }
