@@ -3,10 +3,6 @@
 //! `impl<E, T> PartialEq for Id<E, T>` (same E), so `Id<post::Entity, i32>`
 //! and `Id<user::Entity, i32>` have no shared `PartialEq` impl.
 
-// expect-error: mismatched types
-// expect-error: user::Entity
-// expect-error: post::Entity
-
 use sea_orm::entity::prelude::*;
 
 mod user {

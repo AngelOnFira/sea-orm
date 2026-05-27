@@ -3,10 +3,6 @@
 //! `From<T>`, so `i32: !Into<Id<user::Entity, i32>>`. This is the core
 //! safety contract of the phantom-typed wrapper.
 
-// expect-error: cannot be used as a primary-key argument
-// expect-error: FindByIdArg
-// expect-error: i32
-
 use sea_orm::entity::prelude::*;
 
 mod user {

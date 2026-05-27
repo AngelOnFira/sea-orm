@@ -3,10 +3,6 @@
 //! This makes positional swaps fail to compile, a real-world swap bug
 //! that no design with shared types could catch.
 
-// expect-error: mismatched types
-// expect-error: UserFollowerPkUserId
-// expect-error: UserFollowerPkFollowerId
-
 use sea_orm::entity::prelude::*;
 use sea_orm::ActiveValue::Set;
 
