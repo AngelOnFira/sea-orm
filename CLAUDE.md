@@ -152,7 +152,7 @@ db.get_schema_registry("my_crate::*")
 
 ## Type-safe primary keys
 
-`find_by_id` / `filter_by_id` take the entity's `PrimaryKey::ValueType` exactly — no `Into` conversion. To get compile-time protection against passing the wrong id type, wrap each entity's PK in a per-entity newtype with `DeriveValueType`:
+`find_by_id` / `filter_by_id` / `delete_by_id` accept any `T: FindByIdArg<E>`, which is implemented blanket for `T: Into<<E::PrimaryKey as PrimaryKeyTrait>::ValueType>`. So `&str → String` and `u8 → i32` style conversions still flow through. The type safety comes from the PK type itself: a newtype like `UserId` has no `From<i32>`, so `find_by_id(1)` against a `UserId` PK fails to compile. To get that compile-time protection, wrap each entity's PK in a per-entity newtype with `DeriveValueType` (or use a `sea_orm::Id<E, T>` alias):
 
 ```rust
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, DeriveValueType)]
@@ -243,7 +243,7 @@ Expr::col((self.entity_name(), *self)).like(s)
 
 ### 5. Do not manually impl traits that `DeriveValueType` now generates
 
-In 2.0, `DeriveValueType` auto-generates `NotU8`, `IntoActiveValue`, and `TryFromU64`. Remove manual implementations to avoid conflicts.
+In 2.0, `DeriveValueType` auto-generates `NotU8`, `IntoActiveValue`, `TryFromU64`, and the primary-key auto-increment hint (`DelegatesPkAutoIncrementHint` for struct wrappers, `PkAutoIncrementHint` for string wrappers). Remove manual implementations to avoid conflicts. Hand-writing the auto-increment hint collides directly for string wrappers and via the blanket bridge for struct wrappers.
 
 ### 6. PostgreSQL: `serial` is no longer the default
 

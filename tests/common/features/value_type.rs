@@ -55,9 +55,8 @@ pub mod value_type_pk {
     impl ActiveModelBehavior for ActiveModel {}
 }
 
-/// Token-typed (String) newtype primary key — exercises the auto-increment
-/// allowlist (default `auto_increment = false` for non-integer PKs) and the
-/// delegating `TryFromU64` impl (`String::try_from_u64` returns `Ok(n.to_string())`).
+/// String-backed newtype PK, exercises `PkAutoIncrementHint` resolving
+/// through `DeriveValueType` to `false`.
 pub mod value_type_token_pk {
     use super::*;
     use sea_orm::entity::prelude::*;
@@ -99,6 +98,15 @@ use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, Eq, DeriveValueType)]
 pub struct MyInteger(pub i32);
+
+impl<T> From<T> for MyInteger
+where
+    T: Into<i32>,
+{
+    fn from(v: T) -> MyInteger {
+        MyInteger(v.into())
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, DeriveValueType)]
 pub struct Token(pub String);

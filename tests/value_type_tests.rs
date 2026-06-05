@@ -36,6 +36,12 @@ async fn main() -> Result<(), DbErr> {
     insert_value_pk(&ctx.db).await?;
     insert_value_token_pk(&ctx.db).await?;
 
+    #[cfg(feature = "with-uuid")]
+    {
+        create_value_type_uuid_pk_table(&ctx.db).await?;
+        insert_value_uuid_pk(&ctx.db).await?;
+    }
+
     if cfg!(feature = "sqlx-postgres") {
         create_value_type_postgres_table(&ctx.db).await?;
         insert_value_postgres(&ctx.db).await?;
@@ -49,7 +55,7 @@ async fn main() -> Result<(), DbErr> {
 pub async fn insert_value_general(db: &DatabaseConnection) -> Result<(), DbErr> {
     let model = value_type_general::Model {
         id: 1,
-        number: MyInteger(48),
+        number: 48.into(),
         tag_1: Tag1::Hard,
         tag_2: Tag2::Grey,
     };
@@ -82,6 +88,25 @@ pub async fn insert_value_pk(db: &DatabaseConnection) -> Result<(), DbErr> {
     Ok(())
 }
 
+#[cfg(feature = "with-uuid")]
+pub async fn insert_value_uuid_pk(db: &DatabaseConnection) -> Result<(), DbErr> {
+    use common::features::value_type::{UuidPk, value_type_uuid_pk};
+    let the_uuid = uuid::Uuid::new_v4();
+    let model = value_type_uuid_pk::Model {
+        id: UuidPk(the_uuid),
+        note: "uuid pk round-trip".to_string(),
+    };
+    let result = model.clone().into_active_model().insert(db).await?;
+    assert_eq!(result, model);
+
+    let fetched = value_type_uuid_pk::Entity::find_by_id(UuidPk(the_uuid))
+        .one(db)
+        .await?
+        .expect("uuid pk row should be readable");
+    assert_eq!(fetched, model);
+    Ok(())
+}
+
 pub async fn insert_value_token_pk(db: &DatabaseConnection) -> Result<(), DbErr> {
     let model = value_type_token_pk::Model {
         id: Token("abc-123".to_string()),
@@ -104,7 +129,7 @@ pub async fn insert_value_token_pk(db: &DatabaseConnection) -> Result<(), DbErr>
 pub async fn insert_value_postgres(db: &DatabaseConnection) -> Result<(), DbErr> {
     let model = value_type_pg::Model {
         id: 1,
-        number: MyInteger(48),
+        number: 48.into(),
         str_vec: StringVec(vec!["ab".to_string(), "cd".to_string()]),
     };
     let result = model.clone().into_active_model().insert(db).await?;
@@ -179,7 +204,7 @@ pub fn conversion_test() {
         <MyInteger as ValueType>::try_from(value_random_int).expect("should be ok to convert");
 
     // tests for unwrap and try_from
-    let direct_int = MyInteger(523);
+    let direct_int: MyInteger = 523.into();
     assert_eq!(direct_int, unwrap_int);
     assert_eq!(direct_int, try_from_int);
 
@@ -189,30 +214,33 @@ pub fn conversion_test() {
     assert_eq!(try_from_string_vec.to_string(), ValueTypeErr.to_string());
 }
 
-/// Asserts the new auto-increment allowlist behavior. The macro defaults
-/// `auto_increment` to `true` only when the PK field type is literally one
-/// of the integer primitives (`i32`, `u64`, …). Any newtype wrapper
-/// (`MyInteger`, `Token`, `UuidPk`) defaults to `false` — opt in explicitly
-/// with `#[sea_orm(primary_key, auto_increment)]` when needed.
+/// Asserts that the `PkAutoIncrementHint` trait drives the default for
+/// `PrimaryKeyTrait::auto_increment()`. `DeriveValueType` emits a
+/// delegating impl on the wrapper that resolves through the inner type,
+/// so `MyInteger(i32)` → `true` (via the `i32` impl) and `Token(String)`
+/// → `false` (via the `String` impl) without any explicit annotation on
+/// the entity.
 ///
 /// Combined with the delegating `TryFromU64` impl, this lets `Uuid`,
 /// `String`, and integer newtype PKs all work end-to-end.
 pub fn auto_increment_test() {
     use sea_orm::PrimaryKeyTrait;
 
-    // MyInteger(i32) — newtype wrapper → default auto_increment false
+    // MyInteger(i32), DeriveValueType propagates PkAutoIncrementHint
+    // through the inner i32 → defaults to true.
     assert!(
-        !<value_type_pk::PrimaryKey as PrimaryKeyTrait>::auto_increment(),
-        "MyInteger(i32) newtype PK should default to auto_increment = false"
+        <value_type_pk::PrimaryKey as PrimaryKeyTrait>::auto_increment(),
+        "MyInteger(i32) newtype PK should resolve to auto_increment = true"
     );
 
-    // Token(String) — non-integer inner type → auto_increment false
+    // Token(String), same propagation, but inner is String → false.
+    // No explicit annotation on the entity is required.
     assert!(
         !<value_type_token_pk::PrimaryKey as PrimaryKeyTrait>::auto_increment(),
-        "Token(String) PK should default to auto_increment = false"
+        "Token(String) PK should resolve to auto_increment = false via PkAutoIncrementHint"
     );
 
-    // `Uuid::try_from_u64` returns Err — confirm the newtype delegates and
+    // `Uuid::try_from_u64` returns Err, confirm the newtype delegates and
     // surfaces the same error variant (not a `TryFromIntError`).
     #[cfg(feature = "with-uuid")]
     {
@@ -222,7 +250,7 @@ pub fn auto_increment_test() {
         assert!(matches!(err, DbErr::ConvertFromU64(_)));
     }
 
-    // `String::try_from_u64` returns Ok("n") — confirm the newtype delegates.
+    // `String::try_from_u64` returns Ok("n"), confirm the newtype delegates.
     {
         use sea_orm::TryFromU64;
         let token = Token::try_from_u64(42).unwrap();

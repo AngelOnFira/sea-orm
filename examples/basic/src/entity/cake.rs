@@ -2,15 +2,12 @@
 
 use sea_orm::entity::prelude::*;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, DeriveValueType)]
-pub struct CakeId(pub i32);
-
 #[sea_orm::model]
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
 #[sea_orm(table_name = "cake")]
 pub struct Model {
-    #[sea_orm(primary_key, auto_increment)]
-    pub id: CakeId,
+    #[sea_orm(primary_key)]
+    pub id: i32,
     #[sea_orm(column_type = "Text", nullable)]
     pub name: Option<String>,
     #[sea_orm(has_many)]

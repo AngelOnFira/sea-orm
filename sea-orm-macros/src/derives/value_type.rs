@@ -243,6 +243,11 @@ impl DeriveValueTypeStruct {
                 }
             }
 
+            #[automatically_derived]
+            impl sea_orm::DelegatesPkAutoIncrementHint for #name {
+                type Inner = #field_type;
+            }
+
             #try_from_u64_impl
 
             #impl_not_u8
@@ -339,6 +344,15 @@ impl DeriveValueTypeString {
                 fn into_active_value(self) -> sea_orm::ActiveValue<#name> {
                     sea_orm::ActiveValue::Set(self)
                 }
+            }
+
+            // String-backed wrappers are always non-auto, so impl the hint
+            // directly. The struct path instead emits
+            // `DelegatesPkAutoIncrementHint` and resolves through the inner
+            // type; both spellings yield `false` for a `String` inner.
+            #[automatically_derived]
+            impl sea_orm::PkAutoIncrementHint for #name {
+                const IS_AUTO: bool = false;
             }
 
             #impl_not_u8

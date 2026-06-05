@@ -12,14 +12,6 @@ use syn::{
     token::Comma,
 };
 
-// PK types that default to `auto_increment = true`. Anything else
-// (newtype wrappers, `String`, `Uuid`, custom enums, …) defaults to
-// `auto_increment = false`. Users can always override explicitly with
-// `#[sea_orm(primary_key, auto_increment)]` or `auto_increment = false`.
-const AUTO_INCRE_INTEGER_TYPES: &[&str] = &[
-    "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "isize", "usize",
-];
-
 #[allow(dead_code)]
 fn convert_case(s: &str, case_style: CaseStyle) -> String {
     match case_style {
@@ -250,9 +242,13 @@ pub fn expand_derive_entity_model(
                                         );
                                     }
                                 } else if meta.path.is_ident("auto_increment") {
-                                    // Accept both forms:
+                                    // Accept two attribute forms:
                                     //   #[sea_orm(primary_key, auto_increment = false)]
-                                    //   #[sea_orm(primary_key, auto_increment)]   (bare = true)
+                                    //   #[sea_orm(primary_key, auto_increment)]
+                                    // The second is shorthand for `auto_increment = true`;
+                                    // the `if let Lit::Bool ... else` branches below handle
+                                    // the explicit `= <bool>` case, and the outer `else`
+                                    // handles the bare form.
                                     if meta.input.peek(syn::Token![=]) {
                                         let lit = meta.value()?.parse()?;
                                         if let Lit::Bool(litbool) = lit {
@@ -477,10 +473,6 @@ pub fn expand_derive_entity_model(
                     };
                     let field_span = field.span();
 
-                    if is_primary_key && auto_increment.is_none() {
-                        auto_increment = Some(AUTO_INCRE_INTEGER_TYPES.contains(&field_type));
-                    }
-
                     let sea_query_col_type =
                         super::value_type_match::column_type_expr(sql_type, field_type, field_span);
 
@@ -544,9 +536,20 @@ pub fn expand_derive_entity_model(
     }
 
     let primary_key = {
-        let auto_increment = match auto_increment {
-            Some(value) => value && primary_keys.len() == 1,
-            None => primary_keys.len() == 1,
+        // `PrimaryKeyTrait::auto_increment()` body picks one of three sources:
+        //   1. Composite PKs always emit `false`.
+        //   2. An explicit `#[sea_orm(auto_increment = ...)]` on the column emits
+        //      the literal bool.
+        //   3. Otherwise emit `<FieldType as PkAutoIncrementHint>::IS_AUTO`, so
+        //      `DeriveValueType` wrappers and `Id<E, T>` aliases resolve through
+        //      their inner type at trait-resolution time.
+        let auto_increment_body = if primary_keys.len() != 1 {
+            quote! { false }
+        } else if let Some(value) = auto_increment {
+            quote! { #value }
+        } else {
+            let first = primary_key_types.first();
+            quote! { <#first as sea_orm::PkAutoIncrementHint>::IS_AUTO }
         };
         let primary_key_types = if primary_key_types.len() == 1 {
             let first = primary_key_types.first();
@@ -566,7 +569,7 @@ pub fn expand_derive_entity_model(
                 type ValueType = #primary_key_types;
 
                 fn auto_increment() -> bool {
-                    #auto_increment
+                    #auto_increment_body
                 }
             }
         }
