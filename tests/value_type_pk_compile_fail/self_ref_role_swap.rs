@@ -1,7 +1,7 @@
 //! Self-ref junction tables (where 2+ FK columns point at the same parent)
 //! get per-column "role wrapper" structs around the parent's PK alias.
-//! This makes positional swaps fail to compile, a real-world swap bug
-//! that no design with shared types could catch.
+//! This makes positional swaps (passing one role where the other is
+//! expected) fail to compile.
 
 use sea_orm::entity::prelude::*;
 use sea_orm::ActiveValue::Set;

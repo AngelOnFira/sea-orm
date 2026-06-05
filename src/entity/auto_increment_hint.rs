@@ -1,23 +1,14 @@
 //! Per-type hint for whether a primary key column defaults to
-//! `AUTO_INCREMENT` when the entity declaration doesn't specify
-//! explicitly.
+//! `AUTO_INCREMENT` when the entity declaration doesn't say explicitly.
 //!
-//! The `DeriveEntityModel` macro consults this trait at trait-resolution
-//! time. Wrapper types and `Id<E, T>` aliases resolve through their inner
-//! type because each emits a delegating impl of [`DelegatesPkAutoIncrementHint`].
-//! For example:
+//! `DeriveEntityModel` consults this trait at trait-resolution time.
+//! Integer primitives resolve to `true`; `String`, `Vec<u8>` and `Uuid`
+//! to `false`. Wrapper types and `Id<E, T>` aliases resolve through their
+//! inner type because each emits a delegating impl of
+//! [`DelegatesPkAutoIncrementHint`] (e.g. `Id<Entity, i32>` -> `true`).
 //!
-//! - `pub id: i64` resolves to `true` via the integer-primitive impl.
-//! - `pub id: RoleId` where `RoleId(pub i64)` is `DeriveValueType`
-//!   resolves to `true` by delegating through the inner `i64`.
-//! - `pub id: Token` where `Token(pub String)` resolves to `false`
-//!   through `String`.
-//! - `pub id: CakeId` where `CakeId = Id<Entity, i32>` resolves to
-//!   `true` via the `Id<E, T>` blanket and the inner `i32` impl.
-//!
-//! For custom PK types that don't fall into any of these categories,
-//! either impl this trait on the type or specify `auto_increment`
-//! explicitly on the column attribute.
+//! For custom PK types outside these categories, either impl this trait
+//! on the type or specify `auto_increment` explicitly on the column.
 
 use crate::EntityTrait;
 
@@ -86,14 +77,11 @@ mod uuid_fmt_impls {
 /// Internal helper trait: marks a wrapper as delegating its
 /// `PkAutoIncrementHint` resolution to an inner type.
 ///
-/// `DeriveValueType` emits an impl of this for every wrapper it
-/// generates, naming the wrapped inner type. The blanket
-/// `PkAutoIncrementHint` impl below then bridges from this trait,
-/// keeping the inner-type bound on a generic parameter (deferred at
-/// trait-resolution time) instead of a concrete-type `where` clause
-/// (eagerly checked at impl-declaration time, which would force a
-/// compile error on every wrapper whose inner doesn't impl
-/// `PkAutoIncrementHint`, even if the wrapper is never used as a PK).
+/// `DeriveValueType` emits an impl of this for every wrapper it generates.
+/// The blanket `PkAutoIncrementHint` impl below bridges from it, deferring
+/// the inner-type bound to trait-resolution time rather than a concrete
+/// `where` clause that would force a compile error on every wrapper whose
+/// inner isn't a PK hint, even when the wrapper is never used as a PK.
 pub trait DelegatesPkAutoIncrementHint {
     /// The inner type whose `PkAutoIncrementHint` impl is delegated to.
     type Inner: ?Sized;

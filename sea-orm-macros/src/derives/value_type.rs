@@ -346,6 +346,10 @@ impl DeriveValueTypeString {
                 }
             }
 
+            // String-backed wrappers are always non-auto, so impl the hint
+            // directly. The struct path instead emits
+            // `DelegatesPkAutoIncrementHint` and resolves through the inner
+            // type; both spellings yield `false` for a `String` inner.
             #[automatically_derived]
             impl sea_orm::PkAutoIncrementHint for #name {
                 const IS_AUTO: bool = false;

@@ -20,14 +20,8 @@
 --                            blocker/blocked at the call site fails to
 --                            compile.
 --
--- Entities under src/entity/ are generated from this file via:
---
---   sqlite3 /tmp/typed_pk_tasks.db < examples/basic_typed_pk/tasks.sql
---   cargo run --manifest-path sea-orm-cli/Cargo.toml --bin sea-orm-cli -- \
---       generate entity \
---       --database-url sqlite:///tmp/typed_pk_tasks.db \
---       --with-pk-newtypes \
---       --output-dir examples/basic_typed_pk/src/entity
+-- The entity files under src/entity/ are generated from this schema; see
+-- Readme.md ("Regenerating the entities") for the sea-orm-cli command.
 
 CREATE TABLE user (
     id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,

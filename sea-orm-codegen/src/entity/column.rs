@@ -8,7 +8,7 @@ use std::fmt::Write as FmtWrite;
 use std::rc::Rc;
 
 /// Maps `(table_name, column_name)` to the generated PK newtype identifier
-/// (e.g. `("cake", "id") -> Ident("CakeId")`). Built once per
+/// (e.g. `("cake", "id") -> Ident("CakePk")`). Built once per
 /// `write_entities` call when `--with-pk-newtypes` is enabled.
 pub type PkNewtypeIndex = HashMap<(String, String), Ident>;
 
@@ -55,7 +55,7 @@ pub struct PkNewtypeContext {
     /// against `pk_aliases`.
     pub current_table: String,
     /// Maps `(table_name, column_name)` to the generated PK newtype identifier
-    /// (e.g. `("cake", "id") -> Ident("CakeId")`).
+    /// (e.g. `("cake", "id") -> Ident("CakePk")`).
     pub pk_aliases: Rc<PkNewtypeIndex>,
     /// `(own_table, fk_column) -> RoleWrapperIdent` for self-ref junction
     /// tables where multiple columns FK-reference the same parent.

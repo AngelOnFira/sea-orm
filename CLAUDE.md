@@ -243,7 +243,7 @@ Expr::col((self.entity_name(), *self)).like(s)
 
 ### 5. Do not manually impl traits that `DeriveValueType` now generates
 
-In 2.0, `DeriveValueType` auto-generates `NotU8`, `IntoActiveValue`, and `TryFromU64`. Remove manual implementations to avoid conflicts.
+In 2.0, `DeriveValueType` auto-generates `NotU8`, `IntoActiveValue`, `TryFromU64`, and the primary-key auto-increment hint (`DelegatesPkAutoIncrementHint` for struct wrappers, `PkAutoIncrementHint` for string wrappers). Remove manual implementations to avoid conflicts. Hand-writing the auto-increment hint collides directly for string wrappers and via the blanket bridge for struct wrappers.
 
 ### 6. PostgreSQL: `serial` is no longer the default
 

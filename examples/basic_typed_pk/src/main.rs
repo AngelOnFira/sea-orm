@@ -81,10 +81,9 @@ async fn main() -> Result<(), DbErr> {
     .insert(&db)
     .await?;
 
-    // Role-wrapped junction. Inside `add_blocker`, the two typed args
-    // are funneled through `TaskDependencyPkBlockerTaskId` and
-    // `TaskDependencyPkBlockedTaskId`, swapping the bodies would be
-    // a compile error at the insert site.
+    // Role-wrapped junction. `add_blocker` funnels its two typed args
+    // through distinct `TaskDependencyPk*` wrappers, so swapping the
+    // blocker/blocked roles is a compile error at the insert site.
     operations::add_blocker(&db, draft_policy.id, internal_review.id).await?;
     println!("blocker recorded: \"draft policy\" blocks \"internal review\"");
 

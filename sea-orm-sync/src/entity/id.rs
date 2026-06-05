@@ -6,6 +6,9 @@
 //! cross-entity ID confusion at use sites, e.g. passing a
 //! `Id<post::Entity, _>` to `user::Entity::find_by_id` is a type error.
 //!
+//! `Id` is reachable as `sea_orm::Id` and is intentionally absent from the
+//! entity prelude: hand-written aliases spell it `sea_orm::Id<Entity, T>`.
+//!
 //! ## Type parameters
 //!
 //! `T` is always the raw scalar, `Id<E, T>::value: T`. Keeping the scalar
@@ -13,7 +16,7 @@
 //! associated type on `E`) keeps `PrimaryKey::ValueType = Id<E, T>` from
 //! becoming infinitely recursive (`Id<E>::Inner = Id<E>::Inner = …`),
 //! since the alias spells `T` directly:
-//! `pub type CakeId = sea_orm::Id<Entity, i32>;`.
+//! `pub type CakePk = sea_orm::Id<Entity, i32>;`.
 //!
 //! ## Usage
 //!
@@ -21,16 +24,16 @@
 //! use sea_orm::entity::prelude::*;
 //!
 //! // Codegen emits this as a one-line alias per entity:
-//! pub type CakeId = sea_orm::Id<Entity, i32>;
+//! pub type CakePk = sea_orm::Id<Entity, i32>;
 //!
 //! // The model field uses the alias:
 //! pub struct Model {
-//!     pub id: CakeId,
+//!     pub id: CakePk,
 //!     pub name: String,
 //! }
 //!
 //! // Construction is explicit, `Id::new` (no `From<i32>` blanket):
-//! let id = CakeId::new(7);
+//! let id = CakePk::new(7);
 //!
 //! // Queries use the typed handle:
 //! let cake = cake::Entity::find_by_id(id).one(db)?;
@@ -42,17 +45,8 @@
 //! The only construction path is [`Id::new`]. This is what makes
 //! `user::Entity::find_by_id(7_i32)` fail to compile when the entity's PK
 //! is `Id<user::Entity, i32>`: there's no `i32: Into<Id<user::Entity, i32>>`
-//! impl.
-//!
-//! Note however, users can still explicitly write:
-//!
-//! ```ignore
-//! impl From<i32> for sea_orm::Id<crate::cake::Entity, i32> {
-//!     fn from(n: i32) -> Self { sea_orm::Id::new(n) }
-//! }
-//! ```
-//!
-//! ...and re-enable `cake::Entity::find_by_id(7_i32)` via the `Into` chain.
+//! impl. Do not add such a `From` impl; it re-opens the cross-entity hole
+//! this type exists to close.
 
 use crate::{
     ColIdx, DbErr, EntityTrait, PrimaryKeyTrait, QueryResult, TryFromU64, TryGetError, TryGetable,
@@ -68,22 +62,20 @@ use std::marker::PhantomData;
 /// runtime). `T` is the raw stored value:
 /// - For unary PKs, the scalar type (`i32`, `Uuid`, `String`, …).
 /// - For composite PKs, a tuple of the typed components
-///   (e.g. `(super::cake::CakeId, super::filling::FillingId)`).
+///   (e.g. `(super::cake::CakePk, super::filling::FillingPk)`).
 ///
 /// See the [module-level docs](self) for usage and the safety contract.
 #[repr(transparent)]
 pub struct Id<E: EntityTrait, T> {
-    /// The raw stored value.
+    /// The raw stored value. Public for ergonomic read/unwrap; the
+    /// no-`From<T>` contract blocks implicit call-site conversion, not field
+    /// access (the entity tag lives in `_marker`, not here, so reading or
+    /// mutating `value` cannot turn an `Id<A, _>` into an `Id<B, _>`).
     pub value: T,
-    // `PhantomData<fn(E) -> E>` makes `E` invariant: the function-pointer
-    // type has `E` in both contravariant (parameter) and covariant (return)
-    // position, which combine to invariant. This is what we want, the
-    // compiler must never widen an `Id<A, _>` to an `Id<B, _>` even if A
-    // and B are related. `fn() -> E` alone would be covariant; `fn(E)`
-    // alone would be contravariant; the combined form is the canonical
-    // way to spell invariance. Function-pointer types unconditionally
-    // implement both Send and Sync auto-traits, so wrapping `E` in this
-    // marker preserves them on `Id<E, T>`.
+    // `PhantomData<fn(E) -> E>` makes `E` invariant (E appears in both
+    // parameter and return position), so the compiler never widens an
+    // `Id<A, _>` to an `Id<B, _>`. Function-pointer types are always Send +
+    // Sync, so this marker preserves those auto-traits on `Id<E, T>`.
     _marker: PhantomData<fn(E) -> E>,
 }
 
@@ -161,14 +153,11 @@ impl<E: EntityTrait, T: fmt::Display> fmt::Display for Id<E, T> {
 
 // === PrimaryKeyTrait::ValueType bounds ======================================
 //
-// All five trait bounds delegate to `T`.
-//
-// `Into<Value>` (for unary `T`) → bridges to sea-query's blanket
-// `impl<V: Into<Value>> From<V> for ValueTuple`, which auto-derives
-// `Id<E, T>: IntoValueTuple` (the supertrait of FromValueTuple etc.).
-// Composite PKs don't use `Id<E, tuple>` at the value-binding level.
-// Each composite component is itself a unary `Id<parent, scalar>` and
-// the tuple is just `(CakeId, FillingId)`.
+// All five trait bounds below delegate to `T`. `Into<Value>` (unary `T`)
+// bridges to sea-query's blanket `From<V> for ValueTuple`, auto-deriving
+// `Id<E, T>: IntoValueTuple`. Composite PKs never use `Id<E, tuple>`: each
+// component is a unary `Id<parent, scalar>` and the tuple is just
+// `(CakePk, FillingPk)`.
 
 impl<E: EntityTrait, T> From<Id<E, T>> for Value
 where
@@ -179,22 +168,14 @@ where
     }
 }
 
-// `FromValueTuple` is provided automatically by sea-query's blanket
-// `impl<V: Into<Value> + ValueType> FromValueTuple for V` once we impl
-// `Into<Value>` (above) and `ValueType` (below). For composite `T` neither
-// bound is met and the blanket doesn't fire, that's intentional, as we
-// never use `Id<E, tuple>` at the value-binding level.
+// `FromValueTuple` comes from sea-query's blanket impl once `Into<Value>`
+// (above) and `ValueType` (below) are present; for composite `T` neither
+// fires, which is intentional.
 
-// `TryGetable` (single-column read). When `T: TryGetable`, `Id<E, T>` reads
-// from a single column position. This also auto-derives `TryGetableMany`
-// for `Id<E, T>` (via the blanket `impl<X: TryGetable> TryGetableMany for X`)
-// and makes tuples of `Id<E, T>` impl `TryGetableMany` via the per-arity
-// macro, which is what composite PKs need.
-//
-// Note: `Id<E, T>` does NOT impl `TryGetable` when `T` is itself a tuple.
-// The trait would need column-position arithmetic the macros don't provide
-// for nested wrappers. Composite PKs use tuples of unary `Id<E, scalar>`,
-// not `Id<E, tuple>`, so this restriction is fine in practice.
+// `TryGetable` (single-column read) also auto-derives `TryGetableMany` for
+// `Id<E, T>` and, via the per-arity macro, for tuples of `Id<E, T>` (what
+// composite PKs need). `Id<E, T>` does not impl `TryGetable` for tuple `T`:
+// composite PKs use tuples of unary `Id<E, scalar>`, not `Id<E, tuple>`.
 impl<E: EntityTrait, T: TryGetable> TryGetable for Id<E, T> {
     fn try_get_by<I: ColIdx>(res: &QueryResult, idx: I) -> Result<Self, TryGetError> {
         T::try_get_by(res, idx).map(Id::new)
@@ -207,15 +188,12 @@ impl<E: EntityTrait, T: TryFromU64> TryFromU64 for Id<E, T> {
     }
 }
 
-// `PrimaryKeyArity` is auto-derived via the existing blanket
-// `impl<V: TryGetable> PrimaryKeyArity for V { const ARITY = 1 }`. We don't
-// add a direct impl because that would conflict with the blanket.
+// `PrimaryKeyArity` is auto-derived via the blanket
+// `impl<V: TryGetable> PrimaryKeyArity for V { const ARITY = 1 }`.
 
-// `sea_query::ValueType` so the `DeriveEntityModel` macro can call
-// `<CakeId as ValueType>::column_type()` to determine the SQL column type.
-// Only available when `T: ValueType`, i.e. T is a single scalar, not a
-// composite tuple. For composite PKs the macro asks each individual column
-// for its type, and each column's `T` is a single scalar.
+// `sea_query::ValueType` lets `DeriveEntityModel` call
+// `<CakePk as ValueType>::column_type()` for the SQL column type. Only when
+// `T: ValueType` (a single scalar); composite PKs ask each column instead.
 impl<E: EntityTrait, T: ValueType> ValueType for Id<E, T> {
     fn try_from(v: Value) -> Result<Self, ValueTypeErr> {
         T::try_from(v).map(Id::new)
@@ -242,18 +220,12 @@ impl<E: EntityTrait, T: Nullable> Nullable for Id<E, T> {
     }
 }
 
-// === Construction note ======================================================
-//
-// `Id::new(value)` is the only construction path. We deliberately do NOT
-// provide `impl<E, T> From<T> for Id<E, T>`, that would re-open the safety
-// hole the type is designed to prevent.
-
 // === FindByIdArg ============================================================
 //
 // `find_by_id` / `filter_by_id` accept anything convertible to the entity's
 // primary-key value type. We could bound that directly with `Into`, but doing
-// so makes the compiler's "this argument is wrong" diagnostic incomprehensible
-//, it reads something like
+// so makes the compiler's "this argument is wrong" diagnostic
+// incomprehensible: it reads something like
 //   `the trait bound `Id<user::Entity, i32>: From<Id<post::Entity, i32>>`
 //    is not satisfied`,
 // burying the two entity types inside generic args of `Into`.

@@ -1,23 +1,22 @@
-//! Adversarial tests for the `Id<E, T>` primary-key newtype.
+//! Runtime behaviour tests for the `Id<E, T>` primary-key newtype.
 //!
-//! These tests pin behaviour the type-safety contract relies on:
-//!   - Serde shape: `Id<E, T>` is transparent (number/string, not an object).
-//!   - Hashability: typed PKs of different entities can coexist in distinct
+//! These pin the behaviour the type-safety contract relies on:
+//!   - Layout: `#[repr(transparent)]` holds, so `Id<E, T>` and
+//!     `Option<Id<E, T>>` are the same size as the raw scalar.
+//!   - Hashability: typed PKs of different entities coexist in distinct
 //!     `HashMap`s keyed by their newtype.
-//!   - Layout: `#[repr(transparent)]` actually holds (no phantom-overhead).
-//!   - Cross-entity equality is a compile error (covered separately by the
-//!     trybuild fixtures under `tests/value_type_pk_compile_fail/`).
-//!   - String-typed alias PK works through the macro.
-//!   - Option<TypedPk> for nullable FK serialises sensibly when the value
-//!     is `None` (covered indirectly by `active_model_ex_tests.rs` for the
-//!     DB round-trip; this is the in-memory serde counterpart).
+//!   - Display/Debug: `Display` delegates to the inner value; `Debug`
+//!     includes the entity tag so different entities render distinctly.
+//!   - `into_inner` round-trips back to the raw scalar.
+//!   - Serde shape: `Id<E, T>` is transparent (a bare number/string, not an
+//!     object), including `Option<Id<E, T>>` and a `String`-typed alias.
 //!
-//! Two minimal local entities (`post`, `user`) keep this file self-
-//! contained, the snowflake_chat fixture uses `DeriveValueType` newtype
-//! wrappers, which exhibit different layout/serde guarantees than the
-//! `Id<E, T>` alias path under test here.
+//! Cross-entity confusion (e.g. comparing or passing the wrong entity's id)
+//! is a compile error, pinned separately by the trybuild fixtures under
+//! `tests/value_type_pk_compile_fail/`.
+//!
+//! Two minimal local entities (`post`, `user`) keep this file self-contained.
 
-use sea_orm::entity::prelude::*;
 use std::collections::HashMap;
 use std::mem::size_of;
 

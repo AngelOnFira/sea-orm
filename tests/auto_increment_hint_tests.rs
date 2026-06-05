@@ -74,6 +74,25 @@ mod ent_with_composite_pk {
     impl ActiveModelBehavior for ActiveModel {}
 }
 
+/// Entity whose PK is a bare `type X = i32` alias (not an `Id<E, T>`).
+/// A transparent alias resolves identically to its target, so the macro
+/// emits `<BareUserId as PkAutoIncrementHint>::IS_AUTO`, which is the
+/// `i32` impl and yields `true`.
+mod ent_for_bare_alias {
+    use super::*;
+    pub type BareUserId = i32;
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
+    #[sea_orm(table_name = "ent_for_bare_alias")]
+    pub struct Model {
+        #[sea_orm(primary_key)]
+        pub id: BareUserId,
+        pub name: String,
+    }
+    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+    pub enum Relation {}
+    impl ActiveModelBehavior for ActiveModel {}
+}
+
 #[test]
 fn primitive_integer_defaults_true() {
     assert!(<i32 as PkAutoIncrementHint>::IS_AUTO);
@@ -117,6 +136,11 @@ fn entity_with_i32_pk_resolves_true() {
 #[test]
 fn entity_with_id_alias_pk_resolves_true() {
     assert!(<ent_for_typed_pk::PrimaryKey as PrimaryKeyTrait>::auto_increment());
+}
+
+#[test]
+fn entity_with_bare_alias_i32_pk_resolves_true() {
+    assert!(<ent_for_bare_alias::PrimaryKey as PrimaryKeyTrait>::auto_increment());
 }
 
 #[test]

@@ -79,16 +79,17 @@ pub enum BannerVersion {
 }
 
 /// Controls whether codegen wraps each entity's primary key in a per-table
-/// newtype (e.g. `pub struct CakeId(pub i32);`) and propagates that
-/// wrapper to foreign-key column types.
+/// `sea_orm::Id<Entity, T>` alias (e.g. `pub type CakePk = ...;`) and
+/// propagates that alias to foreign-key column types.
 #[derive(Debug, Default, PartialEq, Eq, Copy, Clone)]
 pub enum PkNewtypeFormat {
     /// Default, emit raw scalar types for primary keys.
     #[default]
     None,
-    /// Emit `pub struct <Table>Id(pub <inner>);` inline above the
-    /// `pub struct Model` declaration. Foreign keys become
-    /// `super::ref_table::RefTableId`.
+    /// Emit `pub type <Table>Pk = sea_orm::Id<Entity, <inner>>;` above the
+    /// `pub struct Model` declaration, and resolve foreign keys to the
+    /// parent's alias (`super::ref_table::RefTablePk`). Self-ref junction
+    /// PK columns get per-column role-wrapper structs instead.
     Inline,
 }
 
@@ -521,8 +522,12 @@ impl EntityWriter {
     fn build_role_wrapper_index(entities: &[Entity]) -> PkNewtypeIndex {
         let mut index = PkNewtypeIndex::new();
         for entity in entities {
-            // Count how many of this entity's columns FK-reference each
-            // parent table.
+            // Count how many of this entity's columns FK-reference each parent
+            // table. Junction PK columns each carry exactly one back-ref (one
+            // `ColumnRef` per `BelongsTo` column, see `EntityTransformer`), so
+            // `.first()` is the sole ref here. This index feeds `get_rs_type`
+            // step 1, which runs before the single-ref/empty-ref checks, so a
+            // role wrapper must only ever be emitted for a single-parent column.
             let mut ref_counts: HashMap<String, usize> = HashMap::new();
             for col in entity.columns.iter() {
                 if let Some(first_ref) = col.refs.first() {
@@ -575,6 +580,12 @@ impl EntityWriter {
         // in `pk_aliases`, that way `get_rs_type` falls through to the FK
         // resolution branch (step 2) and emits `super::ref::ParentAlias`
         // rather than the local own-PK alias (step 3).
+        //
+        // This is a load-bearing dependency on `Column::get_rs_type`'s branch
+        // ORDER (column.rs steps 1-3): the empty `role_wrappers` map skips
+        // step 1, and the non-matching `current_table` skips step 3, leaving
+        // step 2. Reordering those branches would silently change role-wrapper
+        // inner types with no compile-time signal.
         let parent_resolve_opt = ColumnOption {
             date_time_crate: opt.date_time_crate,
             big_integer_type: opt.big_integer_type,
@@ -593,11 +604,12 @@ impl EntityWriter {
             //
             // The `try_from_u64` attribute forces `DeriveValueType` to emit
             // a `TryFromU64` impl by delegation: the parent's alias is
-            // `Id<E, T>` which itself impls `TryFromU64` when `T` does, so
-            // the role wrapper composes safely. Without this attribute the
-            // macro's textual allowlist (i8…u64/String/Uuid) wouldn't fire,
-            // and tuple-PK arity (composite junctions) would lose its
-            // `TryFromU64` bound.
+            // `Id<E, T>`, which impls `TryFromU64` whenever its inner `T`
+            // does, and every PK inner type codegen supports (integers,
+            // `String`, `Uuid`) qualifies, so this is always satisfiable.
+            // Without the attribute the macro's textual allowlist
+            // (i8…u64/String/Uuid) wouldn't fire, and tuple-PK arity
+            // (composite junctions) would lose its `TryFromU64` bound.
             if let Some(ident) = ctx
                 .role_wrappers
                 .get(&(entity.table_name.clone(), pk.name.clone()))
@@ -620,7 +632,7 @@ impl EntityWriter {
             }
 
             // Own-PK alias. Render the inner type as a raw scalar so the
-            // alias is `pub type CakeId = sea_orm::Id<Entity, i32>;`.
+            // alias is `pub type CakePk = sea_orm::Id<Entity, i32>;`.
             let Some(ident) = ctx
                 .pk_aliases
                 .get(&(entity.table_name.clone(), pk.name.clone()))

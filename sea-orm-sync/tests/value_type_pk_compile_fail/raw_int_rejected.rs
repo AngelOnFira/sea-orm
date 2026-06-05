@@ -1,7 +1,6 @@
 //! Passing a raw `i32` to `find_by_id` must not compile when the PK is
 //! `Id<user::Entity, i32>`. `Id<E, T>` deliberately does not impl
-//! `From<T>`, so `i32: !Into<Id<user::Entity, i32>>`. This is the core
-//! safety contract of the phantom-typed wrapper.
+//! `From<T>`, so `i32: !Into<Id<user::Entity, i32>>`.
 
 use sea_orm::entity::prelude::*;
 
