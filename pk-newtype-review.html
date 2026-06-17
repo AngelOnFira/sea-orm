@@ -1,0 +1,1292 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SeaORM PK Newtype Feature — Critical Review</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --bg-2: #161922;
+    --bg-3: #1f2430;
+    --fg: #e6e8ee;
+    --fg-dim: #a4abbb;
+    --fg-faint: #6e7388;
+    --accent: #8fb8ff;
+    --accent-2: #c2d4ff;
+    --good: #6ee7a3;
+    --warn: #ffd166;
+    --bad: #ff7a7a;
+    --info: #9bb8ff;
+    --border: #2a3041;
+  }
+  html { background: var(--bg); }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.6;
+    margin: 0;
+    padding: 32px 24px 96px;
+    max-width: 940px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  h1, h2, h3, h4 {
+    font-family: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+    letter-spacing: -0.01em;
+  }
+  h1 {
+    font-size: 1.8rem;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.5em;
+    margin-top: 0;
+  }
+  h2 {
+    color: var(--accent-2);
+    font-size: 1.35rem;
+    margin-top: 2.4em;
+    border-left: 3px solid var(--accent);
+    padding-left: 0.6em;
+  }
+  h3 {
+    color: var(--accent);
+    font-size: 1.08rem;
+    margin-top: 1.8em;
+  }
+  h4 {
+    color: var(--fg-dim);
+    font-size: 0.95rem;
+    margin-bottom: 0.4em;
+    margin-top: 1.2em;
+  }
+  p, li { color: var(--fg); }
+  small, .meta { color: var(--fg-faint); }
+  code, pre {
+    font-family: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.86rem;
+  }
+  :not(pre) > code {
+    background: var(--bg-3);
+    color: var(--accent-2);
+    padding: 1px 6px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+  }
+  pre {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    line-height: 1.55;
+  }
+  pre code { color: var(--fg); }
+  pre .kw   { color: #c792ea; }
+  pre .ty   { color: #82aaff; }
+  pre .fn   { color: #ffcb6b; }
+  pre .str  { color: #c3e88d; }
+  pre .num  { color: #f78c6c; }
+  pre .cmt  { color: var(--fg-faint); font-style: italic; }
+  pre .att  { color: #89ddff; }
+  pre .err  { color: var(--bad); }
+  pre .good { color: var(--good); }
+  blockquote {
+    border-left: 3px solid var(--fg-faint);
+    margin: 1em 0;
+    padding: 0.5em 1em;
+    color: var(--fg-dim);
+    background: var(--bg-2);
+    border-radius: 0 4px 4px 0;
+  }
+  blockquote.quote-billy { border-left-color: #ffcb6b; }
+  blockquote.quote-tyt   { border-left-color: #c792ea; }
+  blockquote.quote-op    { border-left-color: #82aaff; }
+  blockquote .quote-author { color: var(--fg-faint); font-size: 0.78rem; display: block; margin-top: 0.4em; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1em 0;
+    font-size: 0.92rem;
+  }
+  th, td {
+    border: 1px solid var(--border);
+    padding: 8px 10px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: var(--bg-3); color: var(--accent-2); font-weight: 600; }
+  td code { font-size: 0.78rem; }
+  .pill {
+    display: inline-block;
+    padding: 2px 9px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    font-family: "JetBrains Mono", monospace;
+    letter-spacing: 0.04em;
+  }
+  .pill-block      { background: #3b1118; color: var(--bad); border: 1px solid #5e1d27; }
+  .pill-fix        { background: #3b2a11; color: var(--warn); border: 1px solid #5e441d; }
+  .pill-nice       { background: #1d2c3b; color: var(--info); border: 1px solid #2c4564; }
+  .pill-oos        { background: #1a1d28; color: var(--fg-faint); border: 1px solid var(--border); }
+  .pill-yes        { background: #11331f; color: var(--good); border: 1px solid #1d553a; }
+  .pill-no         { background: #3b1118; color: var(--bad); border: 1px solid #5e1d27; }
+  .pill-dep        { background: #3b2a11; color: var(--warn); border: 1px solid #5e441d; }
+  .pill-confirmed  { background: #3b1118; color: var(--bad); border: 1px solid #5e1d27; }
+  .pill-norepro    { background: #11331f; color: var(--good); border: 1px solid #1d553a; }
+  .pill-design     { background: #1d2c3b; color: var(--info); border: 1px solid #2c4564; }
+  .verdict-box {
+    background: var(--bg-2);
+    border-left: 4px solid var(--accent);
+    padding: 14px 18px;
+    margin: 1.2em 0;
+    border-radius: 0 6px 6px 0;
+  }
+  .verdict-box.bad  { border-left-color: var(--bad); }
+  .verdict-box.warn { border-left-color: var(--warn); }
+  .verdict-box.good { border-left-color: var(--good); }
+  .finding {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px 20px;
+    margin: 18px 0;
+  }
+  .finding-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 0.5em;
+  }
+  .finding-head strong { color: var(--accent-2); font-size: 1.02rem; }
+  .finding h4 { margin-top: 0.8em; }
+  hr {
+    border: 0;
+    border-top: 1px solid var(--border);
+    margin: 2.5em 0;
+  }
+  .toc {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 18px;
+    margin: 1em 0 2em;
+  }
+  .toc ol { margin: 0.4em 0 0; padding-left: 1.4em; }
+  .toc a { color: var(--accent-2); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  .grid-two {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin: 1em 0;
+  }
+  @media (max-width: 760px) { .grid-two { grid-template-columns: 1fr; } }
+  .test-output {
+    font-size: 0.78rem;
+    background: #0a0c10;
+    border-left: 3px solid var(--bad);
+  }
+  .test-output.pass { border-left-color: var(--good); }
+  .test-output.warn { border-left-color: var(--warn); }
+  .label {
+    display: inline-block;
+    font-size: 0.7rem;
+    color: var(--fg-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 0.2em;
+  }
+</style>
+</head>
+<body>
+
+<h1>SeaORM PK Newtype Feature — Critical Review</h1>
+<p class="meta">Branch: <code>master</code> · Commits ec48d8b7..f0b4b566 · Reviewed 2026-05-22 · Updated with discussion #1310 analysis + adversarial test evidence + role-newtype design + fix plan</p>
+
+<div class="toc">
+<strong>Contents</strong>
+<ol>
+  <li><a href="#tldr">TL;DR</a></li>
+  <li><a href="#fk-sample">Using a typed foreign key (sample code)</a></li>
+  <li><a href="#tech-q">Why <code>ref_table</code> / <code>ref_column</code> / <code>current_table</code> / <code>pk_newtype_index</code>?</a></li>
+  <li><a href="#flag">Should <code>find_by_id</code> have been feature-gated?</a></li>
+  <li><a href="#migration">Migration-type leakage concern</a></li>
+  <li><a href="#discussion-1310">GitHub discussion #1310 analysis</a></li>
+  <li><a href="#role-newtypes">Role newtypes for same-type junctions (your idea)</a></li>
+  <li><a href="#id-of-e">Deep-dive: <code>Id&lt;E&gt;</code> phantom-typed alternative</a></li>
+  <li><a href="#findings-detailed">Detailed findings with worked examples</a></li>
+  <li><a href="#adversarial">Adversarial tests — proof these are real</a></li>
+  <li><a href="#fix-plan">Plan to fix the remaining items</a></li>
+  <li><a href="#bottom">Bottom line</a></li>
+</ol>
+</div>
+
+<h2 id="tldr">1. TL;DR</h2>
+
+<div class="verdict-box warn">
+<p><strong>Both reviewers + adversarial tests agree: do not merge as-is.</strong> The feature works for the simple cases, but six SHOULD-FIX bugs are now reproducible (not theoretical) and one design opportunity was missed.</p>
+
+<ul>
+  <li><span class="pill pill-fix">SHOULD-FIX</span> &nbsp; <strong>Multi-FK overwrite.</strong> Confirmed: when the same column is constrained against two parents, the second silently overwrites the first.</li>
+  <li><span class="pill pill-fix">SHOULD-FIX</span> &nbsp; <strong>Wrapper naming.</strong> A table named <code>cake_id</code> produces <code>CakeIdId</code>; a composite PK with a column literally named <code>id</code> produces a wrapper named <code>Id</code>.</li>
+  <li><span class="pill pill-fix">SHOULD-FIX</span> &nbsp; <strong>Type-alias regression.</strong> <code>type LegacyUserId = i32; pub id: LegacyUserId;</code> silently flips from autoincrement-true to autoincrement-false.</li>
+  <li><span class="pill pill-fix">SHOULD-FIX</span> &nbsp; <strong>Stale entity files on regen.</strong> Dropping a table leaves its <code>.rs</code> on disk.</li>
+  <li><span class="pill pill-fix">SHOULD-FIX</span> &nbsp; <strong><code>--with-pk-newtypes --with-serde both</code> generates code that does not compile</strong>: the wrapper has no <code>Serialize</code>/<code>Deserialize</code>.</li>
+  <li><span class="pill pill-fix">SHOULD-FIX</span> &nbsp; <strong><code>find_by_id</code> tightening</strong> is a universal breaking change. Confirmed by adversarial test: <code>find_by_id(1u8)</code> / <code>find_by_id(1i64)</code> no longer compile.</li>
+  <li><span class="pill pill-design">DESIGN</span> &nbsp; <strong>Single generic <code>Id&lt;E&gt;</code></strong> would have delivered the same safety with one type, automatic blanket impls, and zero per-table codegen.</li>
+</ul>
+
+<p><strong>Self-referential safety is weak</strong> — <code>user_follower(user_id, follower_id)</code> still lets you swap arguments at the call site. <strong>BUT</strong> there's a clean fix using per-column "role" newtypes — see §7.</p>
+
+<p><strong>UUID PK newtype round-trip actually works.</strong> Adversarial test added a real DB round-trip and it passes. <span class="pill pill-norepro">Coverage gap closed.</span></p>
+
+<p><strong>Migration-type leakage concern does NOT apply</strong> — entities are regenerated snapshots, not append-only history. Detailed in §5.</p>
+</div>
+
+<h2 id="fk-sample">2. Using a typed foreign key — sample code</h2>
+
+<p>With <code>--with-pk-newtypes</code> applied to a parent (<code>cake</code>) and a child (<code>fruit</code>), the generated entities look like this:</p>
+
+<pre><code><span class="cmt">// examples/basic/src/entity/cake.rs</span>
+<span class="kw">use</span> sea_orm::entity::prelude::*;
+
+<span class="att">#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, DeriveValueType)]</span>
+<span class="kw">pub struct</span> <span class="ty">CakeId</span>(<span class="kw">pub</span> <span class="ty">i32</span>);
+
+<span class="att">#[sea_orm::model]</span>
+<span class="att">#[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]</span>
+<span class="att">#[sea_orm(table_name = <span class="str">"cake"</span>)]</span>
+<span class="kw">pub struct</span> <span class="ty">Model</span> {
+    <span class="att">#[sea_orm(primary_key, auto_increment)]</span>
+    <span class="kw">pub</span> id: <span class="ty">CakeId</span>,
+    <span class="att">#[sea_orm(column_type = <span class="str">"Text"</span>, nullable)]</span>
+    <span class="kw">pub</span> name: <span class="ty">Option</span>&lt;<span class="ty">String</span>&gt;,
+    <span class="att">#[sea_orm(has_many)]</span>
+    <span class="kw">pub</span> fruits: <span class="ty">HasMany</span>&lt;<span class="kw">super</span>::fruit::<span class="ty">Entity</span>&gt;,
+}
+</code></pre>
+
+<pre><code><span class="cmt">// examples/basic/src/entity/fruit.rs</span>
+<span class="kw">use</span> sea_orm::entity::prelude::*;
+
+<span class="att">#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, DeriveValueType)]</span>
+<span class="kw">pub struct</span> <span class="ty">FruitId</span>(<span class="kw">pub</span> <span class="ty">i32</span>);
+
+<span class="att">#[sea_orm::model]</span>
+<span class="att">#[sea_orm(table_name = <span class="str">"fruit"</span>)]</span>
+<span class="kw">pub struct</span> <span class="ty">Model</span> {
+    <span class="att">#[sea_orm(primary_key, auto_increment)]</span>
+    <span class="kw">pub</span> id: <span class="ty">FruitId</span>,
+    <span class="kw">pub</span> name: <span class="ty">String</span>,
+    <span class="kw">pub</span> cake_id: <span class="ty">Option</span>&lt;<span class="kw">super</span>::cake::<span class="ty">CakeId</span>&gt;,   <span class="cmt">// ← typed FK</span>
+    <span class="att">#[sea_orm(belongs_to, from = <span class="str">"cake_id"</span>, to = <span class="str">"id"</span>)]</span>
+    <span class="kw">pub</span> cake: <span class="ty">HasOne</span>&lt;<span class="kw">super</span>::cake::<span class="ty">Entity</span>&gt;,
+}
+</code></pre>
+
+<h3>Pattern A — one-shot fetch with the loader (preferred)</h3>
+
+<pre><code><span class="kw">async fn</span> <span class="fn">describe_fruit</span>(db: &amp;DbConn, id: fruit::<span class="ty">FruitId</span>) -&gt; <span class="ty">Result</span>&lt;(), <span class="ty">DbErr</span>&gt; {
+    <span class="kw">let</span> loaded = fruit::<span class="ty">Entity</span>::<span class="fn">load</span>()
+        .<span class="fn">filter_by_id</span>(id)                  <span class="cmt">// only accepts FruitId — compile error if you pass CakeId</span>
+        .<span class="fn">with</span>(cake::<span class="ty">Entity</span>)              <span class="cmt">// eager-loads the parent cake via the belongs_to relation</span>
+        .<span class="fn">one</span>(db)
+        .<span class="kw">await</span>?
+        .<span class="fn">expect</span>(<span class="str">"fruit not found"</span>);
+
+    <span class="kw">match</span> loaded.cake {
+        <span class="ty">HasOne</span>::<span class="ty">Loaded</span>(cake) =&gt; <span class="fn">println!</span>(<span class="str">"{} grows on the {} cake"</span>, loaded.name, cake.name.<span class="fn">unwrap_or_default</span>()),
+        <span class="ty">HasOne</span>::<span class="ty">Unloaded</span>          =&gt; <span class="fn">unreachable!</span>(),
+    }
+    <span class="ty">Ok</span>(())
+}
+</code></pre>
+
+<h3>Pattern B — manual two-step using the typed FK column</h3>
+
+<p>The FK column <em>is already</em> a <code>CakeId</code>, so you pass it straight to <code>find_by_id</code> on the parent — no wrapping, no casting:</p>
+
+<pre><code><span class="kw">async fn</span> <span class="fn">cake_of</span>(db: &amp;DbConn, fruit_id: fruit::<span class="ty">FruitId</span>) -&gt; <span class="ty">Result</span>&lt;<span class="ty">Option</span>&lt;cake::<span class="ty">Model</span>&gt;, <span class="ty">DbErr</span>&gt; {
+    <span class="kw">let</span> fruit = fruit::<span class="ty">Entity</span>::<span class="fn">find_by_id</span>(fruit_id).<span class="fn">one</span>(db).<span class="kw">await</span>?;
+    <span class="kw">let</span> <span class="ty">Some</span>(fruit) = fruit <span class="kw">else</span> { <span class="kw">return</span> <span class="ty">Ok</span>(<span class="ty">None</span>); };
+
+    <span class="kw">match</span> fruit.cake_id {
+        <span class="ty">Some</span>(cake_id) =&gt; cake::<span class="ty">Entity</span>::<span class="fn">find_by_id</span>(cake_id).<span class="fn">one</span>(db).<span class="kw">await</span>,
+        <span class="ty">None</span>          =&gt; <span class="ty">Ok</span>(<span class="ty">None</span>),
+    }
+}
+</code></pre>
+
+<h3>Pattern C — the safety win, demonstrated</h3>
+
+<pre><code><span class="kw">let</span> cake_id   = cake::<span class="ty">CakeId</span>(<span class="num">7</span>);
+<span class="kw">let</span> fruit_id  = fruit::<span class="ty">FruitId</span>(<span class="num">3</span>);
+
+cake::<span class="ty">Entity</span>::<span class="fn">find_by_id</span>(cake_id).<span class="fn">one</span>(db).<span class="kw">await</span>?;       <span class="cmt">// ok</span>
+
+<span class="err">cake::Entity::find_by_id(fruit_id)</span>;                  <span class="cmt">// expected CakeId, found FruitId</span>
+<span class="err">cake::Entity::find_by_id(7_i32)</span>;                     <span class="cmt">// expected CakeId, found i32</span>
+</code></pre>
+
+<h3>Pattern D — reverse direction (<code>has_many</code>)</h3>
+
+<pre><code><span class="kw">async fn</span> <span class="fn">cake_with_fruits</span>(db: &amp;DbConn, id: cake::<span class="ty">CakeId</span>) -&gt; <span class="ty">Result</span>&lt;_, <span class="ty">DbErr</span>&gt; {
+    <span class="kw">let</span> cake = cake::<span class="ty">Entity</span>::<span class="fn">load</span>()
+        .<span class="fn">filter_by_id</span>(id)
+        .<span class="fn">with</span>(fruit::<span class="ty">Entity</span>)         <span class="cmt">// loads all fruits whose cake_id == this cake.id</span>
+        .<span class="fn">one</span>(db)
+        .<span class="kw">await</span>?
+        .<span class="fn">expect</span>(<span class="str">"cake not found"</span>);
+
+    <span class="kw">for</span> fruit <span class="kw">in</span> cake.fruits.<span class="fn">unwrap_or_default</span>() {
+        <span class="fn">println!</span>(<span class="str">"{:?} -&gt; {}"</span>, fruit.id, fruit.name);
+    }
+    <span class="ty">Ok</span>(())
+}
+</code></pre>
+
+<h2 id="tech-q">3. Why we ended up tracking <code>ref_table</code>, <code>ref_column</code>, <code>current_table</code>, <code>pk_newtype_index</code></h2>
+
+<h3>The core problem</h3>
+
+<p>Codegen receives a list of entities, each with a list of <code>Column</code>s. For a <code>Column</code> to render its Rust type as <code>super::cake::CakeId</code> instead of <code>i32</code>, three pieces of information have to be available at the moment <code>Column::get_rs_type</code> is called:</p>
+
+<ol>
+<li><strong>Is this column's table's PK</strong> wrapped under <code>--with-pk-newtypes</code>? → it needs to look itself up by <code>(my_table, my_column_name)</code> and emit the local newtype.</li>
+<li><strong>Is this column a foreign key</strong>, and if so, to which <code>(parent_table, parent_column)</code>? → it needs to look up that key and emit <code>super::ref_table::RefTableId</code>.</li>
+<li><strong>What is "my table"?</strong> → <code>Column</code> alone doesn't know which entity it belongs to.</li>
+</ol>
+
+<h3>Where each piece lives</h3>
+
+<table>
+<thead><tr><th>Piece</th><th>Lives on</th><th>Populated when</th><th>Why</th></tr></thead>
+<tbody>
+<tr>
+  <td><code>ref_table</code><br><code>ref_column</code></td>
+  <td><code>Column</code><br>(per-column)</td>
+  <td><code>EntityTransformer::transform</code> walks each <code>BelongsTo</code> relation and writes them back</td>
+  <td>So a column knows "I point at <em>those</em> columns over there." Needed for piece (2).</td>
+</tr>
+<tr>
+  <td><code>pk_newtype_index</code></td>
+  <td><code>ColumnOption</code><br>(per-render)</td>
+  <td>Built once in <code>EntityWriter::write_entities</code> before any entity is rendered</td>
+  <td>The shared <code>(table, column) → Ident</code> lookup so any FK resolution returns the same identifier name the parent table is going to emit.</td>
+</tr>
+<tr>
+  <td><code>current_table</code></td>
+  <td><code>ColumnOption</code><br>(per-render)</td>
+  <td>Set per-entity by <code>column_option(entity, …)</code></td>
+  <td>Without it, a column doesn't know whether <code>(my_name)</code> is a PK in <em>its own</em> table or just a coincidentally-named column.</td>
+</tr>
+</tbody>
+</table>
+
+<h3>"But can <code>ref_table</code> be more than one?"</h3>
+
+<p><strong>Yes — and adversarial test #1 confirms it's a real bug.</strong> Two cases:</p>
+
+<div class="grid-two">
+<div class="finding">
+<h4>Case A — composite FK (handled)</h4>
+<p>A single FK <em>constraint</em> spans multiple <em>columns</em> pointing at a multi-column PK. Example: <code>FOREIGN KEY (a, b) REFERENCES parent(x, y)</code>. The code iterates <code>columns.iter().zip(ref_columns.iter())</code> within one relation — each child column gets paired with its corresponding parent column. Correct.</p>
+</div>
+<div class="finding">
+<h4>Case B — same column in 2 FKs (BROKEN)</h4>
+<p>A single column constrained twice against two different parents:<br><code>user_id INT,<br>FOREIGN KEY (user_id) REFERENCES users(id),<br>FOREIGN KEY (user_id) REFERENCES legacy_users(id);</code><br><br>Legal SQL. Two <code>Relation</code> entries are produced. The current loop in <code>transformer.rs:132-141</code> overwrites <code>col.ref_table</code> on each iteration → the last FK wins silently. Codegen will emit a wrapper from the wrong parent.</p>
+</div>
+</div>
+
+<p>Fix: change to <code>Vec&lt;(String, String)&gt;</code> and either error or pick a documented winner under <code>--with-pk-newtypes</code>.</p>
+
+<h2 id="flag">4. Should <code>find_by_id</code> have been feature-flagged?</h2>
+
+<p><strong>Yes — both reviewers and adversarial test #8 confirm the call was wrong.</strong> The tightening (<code>find_by_id&lt;T: Into&lt;ValueType&gt;&gt;</code> → <code>find_by_id(ValueType)</code>) breaks universally but benefits only callers who <em>also</em> adopt the newtype codegen.</p>
+
+<table>
+<thead><tr><th>Option</th><th>Behavior</th><th>Trade-off</th></tr></thead>
+<tbody>
+<tr><td>Keep <code>Into&lt;ValueType&gt;</code> lenient</td><td>Status quo. Safety by convention.</td><td>Zero breakage but trybuild test #2 regresses if a user adds an innocent <code>From&lt;i32&gt;</code>.</td></tr>
+<tr><td>Cargo feature <code>strict-find-by-id</code></td><td>Lenient by default; opt-in to strict.</td><td>Cargo-feature unification means any non-opting dependency drags everyone back to lenient.</td></tr>
+<tr><td><strong>Separate <code>find_by_id_strict</code> method (recommended)</strong></td><td>Both available. Codegen-newtype docs recommend strict.</td><td>Zero breakage, gradual migration, lintable.</td></tr>
+<tr><td>Current: universal tightening</td><td>Every caller uses <code>ValueType</code> exactly.</td><td>Cleanest API but ships breaking change in a feature that's otherwise opt-in.</td></tr>
+</tbody>
+</table>
+
+<h2 id="migration">5. Migration-type leakage — does the same problem apply here?</h2>
+
+<div class="verdict-box good">
+<p><strong>Verdict: NO.</strong> The SeaORM team's concern was structural to migrations (append-only history). It doesn't apply to entity newtypes.</p>
+</div>
+
+<h3>The original concern</h3>
+<blockquote>Migrations reference column types. Migrations are append-only — frozen the moment they ship. If migration #3 references a type defined alongside an entity, and migration #57 drops the column/table, the historical migration would reference a now-deleted type. Migration history would no longer compile.</blockquote>
+
+<h3>Why entity newtypes are different</h3>
+<ol>
+<li><strong>Entities are a regenerated snapshot, not history.</strong> Codegen walks the <em>current</em> live schema on every run. No append-only frozen artifact.</li>
+<li><strong>Migrations don't reference entity types.</strong> Searches across <code>sea-orm-migration/</code> show migrations only touch <code>ColumnType</code>, <code>ColumnDef</code>, <code>Iden</code>, <code>Table</code>. When migrations need queries, the pattern is local mini-entity redefinition inside the migration module.</li>
+<li><strong>Regen on a dropped table = wrapper disappears.</strong> Drop <code>users</code>, regen — no more <code>UserId</code>. Business code referencing <code>UserId</code> gets loud compile errors pointing exactly at the fix sites.</li>
+<li><strong>The wrapper is transparent at SQL/wire level.</strong> <code>DeriveValueType</code> on <code>UserId(i32)</code> delegates <code>column_type() → ColumnType::Integer</code>. SQL knows nothing about the wrapper.</li>
+</ol>
+
+<h3>Adjacent risk: stale .rs files on disk</h3>
+<p>Adversarial test #12 confirms: when you drop a table and regenerate, <code>mod.rs</code> and dependent <code>.rs</code> files <strong>are</strong> updated, but <strong>the orphaned <code>a.rs</code> stays on disk</strong>. Pre-existing codegen behavior, not unique to newtypes — but it does mean the newtype declaration lingers in source control until manually deleted.</p>
+
+<h2 id="discussion-1310">6. GitHub discussion #1310 — original proposal vs what we built</h2>
+
+<p>The discussion (<a href="https://github.com/SeaQL/sea-orm/discussions/1310">github.com/SeaQL/sea-orm/discussions/1310</a>, December 2022 → July 2023) is short — one OP, two maintainers, eight comments. The opener was AngelOnFira (the user driving this branch). Here's what was actually said and how the current implementation matches up.</p>
+
+<h3>The original problem statement (Dec 2022)</h3>
+
+<blockquote class="quote-op">
+"In this model, I'm storing a few things:<br>
+— The literal <code>discord_id</code> that I would get from this object<br>
+— A <code>guild_id</code>, which isn't actually the id of a Discord Guild, but instead the id of a row in another table<br>
+— A <code>channel_id</code>, which is also a pointer to somewhere else in the database.<br><br>
+So in this case, when I get this model from the database, it's up to me as the developer to remember which of those are Discord IDs, and which are IDs of Database rows."
+<span class="quote-author">— AngelOnFira, OP</span>
+</blockquote>
+
+<p>The original user pain wasn't "PostId vs CakeId" — it was <strong>"external system ID (Discord, Stripe, ...) vs database row ID"</strong>. Per-table wrappers (<code>UserId(i32)</code>) <em>do</em> solve cross-table confusion, but they don't fully solve the original framing where the same physical column is a "pointer to external system" rather than "pointer to another row." The OP's proposed solution included that case:</p>
+
+<pre><code><span class="kw">pub struct</span> <span class="ty">DatabaseId</span>(<span class="kw">pub</span> <span class="ty">i32</span>);
+<span class="kw">pub struct</span> <span class="ty">DiscordId</span>(<span class="kw">pub</span> <span class="ty">i32</span>);
+
+<span class="kw">pub struct</span> <span class="ty">Model</span> {
+    <span class="kw">pub</span> id: <span class="ty">i32</span>,
+    <span class="kw">pub</span> discord_id: <span class="ty">DiscordId</span>,         <span class="cmt">// external-system marker, not an FK</span>
+    <span class="kw">pub</span> guild_id: <span class="ty">Option</span>&lt;<span class="ty">DatabaseId</span>&gt;,  <span class="cmt">// pointer to another row</span>
+    <span class="kw">pub</span> channel_id: <span class="ty">DatabaseId</span>,        <span class="cmt">// pointer to another row</span>
+}
+</code></pre>
+
+<h3>Maintainer response (Dec 2022)</h3>
+
+<blockquote class="quote-billy">
+"I guess we can start by providing an easier interface to use custom type (newtype) in SeaORM model. [proposed manual <code>impl From&lt;T&gt; for Value</code> / <code>TryGetable</code> / <code>ValueType</code>]. A derive macro can implement all these traits on behalf of the user."
+<span class="quote-author">— billy1624, maintainer</span>
+</blockquote>
+
+<blockquote class="quote-tyt">"+1 for this"<span class="quote-author">— tyt2y3, maintainer</span></blockquote>
+
+<p>The maintainer's response is exactly what <code>DeriveValueType</code> later became. <strong>The macro layer already shipped</strong> — that's why our Phase 1/2 work could lean on it.</p>
+
+<h3>OP's codegen extension (July 2023)</h3>
+
+<p>Seven months later the OP returned with a codegen-specific proposal — but he proposed a <strong>type alias</strong>, not a newtype:</p>
+
+<blockquote class="quote-op">
+<code>pub type ChallengeTablePK = i32;</code><br><br>
+"It could be quite helpful to get codegen to generate a custom type for the primary key. It could be an opt-in flag when generating entities."
+<span class="quote-author">— AngelOnFira</span>
+</blockquote>
+
+<p><strong>Critically important observation:</strong> a type alias gives <em>zero</em> compile-time safety. <code>type ChallengeTablePK = i32;</code> is <em>transparent</em>. <code>fn(challenge_id: ChallengeTablePK)</code> and <code>fn(raw: i32)</code> accept the same values. <strong>Our implementation (newtypes) actually delivers what the OP <em>wanted</em>, not what the OP <em>proposed</em>.</strong> That's a strict improvement.</p>
+
+<h3>OP on naming convention</h3>
+
+<blockquote class="quote-op">
+"I imagine that since tables can't have the same name, it shouldn't be too hard to just use that. … maybe it could just be named something generic like <code>TablePK</code>?"
+<span class="quote-author">— AngelOnFira (re unary PK)</span>
+</blockquote>
+
+<blockquote class="quote-op">
+"<code>pub type CakeFillingPkCakeId = i32;</code><br>
+<code>pub type CakeFillingPkFillingId = i32;</code><br><br>
+Their field names should still keep them unique … I think it needs to include both the table name and the field name as an identifier, without either becoming truncated so that there aren't any discrepancies if names are changed."
+<span class="quote-author">— AngelOnFira (re composite PK)</span>
+</blockquote>
+
+<p>The OP's naming convention is <em>more verbose</em> than ours but <em>avoids the collisions we ship with</em>. Compare:</p>
+
+<table>
+<thead><tr><th>Scenario</th><th>OP's proposal</th><th>Our implementation</th></tr></thead>
+<tbody>
+<tr><td>Table <code>cake</code>, PK <code>id</code></td><td><code>CakePk</code> or <code>CakeTablePK</code></td><td><code>CakeId</code></td></tr>
+<tr><td>Table <code>cake_id</code>, PK <code>id</code></td><td><code>CakeIdPk</code></td><td><span class="err">CakeIdId</span> ← bug</td></tr>
+<tr><td>Composite junction <code>cake_filling</code>, cols <code>cake_id</code> + <code>filling_id</code></td><td><code>CakeFillingPkCakeId</code><br><code>CakeFillingPkFillingId</code></td><td>Reuses parents: <code>super::cake::CakeId</code> + <code>super::filling::FillingId</code></td></tr>
+<tr><td>Composite with col literally named <code>id</code></td><td><code>FooPkId</code></td><td><span class="err">Id</span> ← bug (prelude collision)</td></tr>
+<tr><td>Same-type self-ref junction (<code>user_follower</code>)</td><td><code>UserFollowerPkUserId</code><br><code>UserFollowerPkFollowerId</code> — distinct types per role</td><td>Both reuse <code>super::user::UserId</code> — same type, <span class="err">swap not caught</span></td></tr>
+</tbody>
+</table>
+
+<h3>Where the OP's convention is better</h3>
+
+<p><strong>The "<code>&lt;Table&gt;Pk&lt;Field&gt;</code>" pattern would have automatically caught the self-ref junction bug.</strong> Generating <code>UserFollowerPkUserId</code> and <code>UserFollowerPkFollowerId</code> as distinct types means a swap fails to compile. Our implementation chose the more elegant-looking "reuse parent PK type" approach, which gives <em>cross-entity</em> safety but loses <em>positional</em> safety inside the junction.</p>
+
+<h3>Where our implementation is better</h3>
+
+<p>Cross-entity composite confusion is <em>much</em> more common than positional junction swaps. If you have <code>cake_filling.cake_id: super::cake::CakeId</code>, you can pass <code>cake.id</code> into a function expecting <code>cake_filling.cake_id</code> directly, no conversion. With the OP's verbose convention you'd need to convert: <code>CakeFillingPkCakeId::from(cake.id.0)</code>. <strong>Trade-off: cross-entity reuse vs intra-junction positional safety.</strong></p>
+
+<h3>Maintainer engagement on composites</h3>
+
+<blockquote class="quote-billy">"Interesting! But how about composite primary key?"<span class="quote-author">— billy1624</span></blockquote>
+
+<p>The maintainer flagged composites as a concern but the discussion stalled at the OP's last reply. No final design was agreed.</p>
+
+<h3>Things never raised in #1310</h3>
+
+<ul>
+<li><strong>Tightening <code>find_by_id</code>'s signature.</strong> Not mentioned. Unilateral design call in our branch.</li>
+<li><strong>Migration-type leakage.</strong> Not mentioned in this thread. (You said you'd discussed it elsewhere.)</li>
+<li><strong>Serde derives on the wrapper.</strong> Not mentioned.</li>
+<li><strong>Auto-increment heuristic.</strong> Not mentioned.</li>
+</ul>
+
+<h3>Net assessment</h3>
+
+<div class="verdict-box">
+<p><strong>The discussion mandates: "ship some form of opt-in codegen-generated wrapper for PKs that catches cross-ID confusion." We did that.</strong> The implementation goes beyond the literal proposal (newtypes instead of aliases, real safety not just hints), but skipped the OP's more conservative naming convention that would have sidestepped the collision bugs. The OP's <code>&lt;Table&gt;Pk&lt;Field&gt;</code> pattern, ironically, would have caught one of the bugs adversarial review later found.</p>
+</div>
+
+<h2 id="role-newtypes">7. Role newtypes for same-type junctions — your idea, expanded</h2>
+
+<p>You asked:</p>
+<blockquote>"Couldn't we just have a type wrapper in that entity that disambiguates the two columns, but this type is just labelled and equal to the type that both are?"</blockquote>
+
+<p><strong>Yes — and it's the right idea.</strong> Let me sketch what this looks like concretely.</p>
+
+<h3>The problem, restated</h3>
+
+<p>Current codegen output for the self-ref junction:</p>
+
+<pre><code><span class="cmt">// user_follower.rs — current output</span>
+<span class="kw">pub struct</span> <span class="ty">Model</span> {
+    <span class="att">#[sea_orm(primary_key, auto_increment = false)]</span>
+    <span class="kw">pub</span> user_id: <span class="kw">super</span>::user::<span class="ty">UserId</span>,
+    <span class="att">#[sea_orm(primary_key, auto_increment = false)]</span>
+    <span class="kw">pub</span> follower_id: <span class="kw">super</span>::user::<span class="ty">UserId</span>,
+}
+</code></pre>
+
+<p>Both fields share <code>UserId</code>. Adversarial test #6 proves: <code>find_by_id((follower.id, user.id))</code> compiles. Swapped arguments → silent wrong row.</p>
+
+<h3>The role-newtype fix</h3>
+
+<p>For self-ref junctions <strong>only</strong>, codegen emits per-column "role" wrappers around the parent PK type:</p>
+
+<pre><code><span class="cmt">// user_follower.rs — proposed role-newtype output</span>
+<span class="kw">use</span> sea_orm::entity::prelude::*;
+
+<span class="cmt">// These two wrappers are structurally identical — both hold a UserId —</span>
+<span class="cmt">// but the type system treats them as distinct.</span>
+<span class="att">#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, DeriveValueType)]</span>
+<span class="kw">pub struct</span> <span class="ty">FollowedId</span>(<span class="kw">pub</span> <span class="kw">super</span>::user::<span class="ty">UserId</span>);
+
+<span class="att">#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, DeriveValueType)]</span>
+<span class="kw">pub struct</span> <span class="ty">FollowerId</span>(<span class="kw">pub</span> <span class="kw">super</span>::user::<span class="ty">UserId</span>);
+
+<span class="att">#[sea_orm::model]</span>
+<span class="att">#[sea_orm(table_name = <span class="str">"user_follower"</span>)]</span>
+<span class="kw">pub struct</span> <span class="ty">Model</span> {
+    <span class="att">#[sea_orm(primary_key, auto_increment = false)]</span>
+    <span class="kw">pub</span> user_id: <span class="ty">FollowedId</span>,    <span class="cmt">// the user being followed</span>
+    <span class="att">#[sea_orm(primary_key, auto_increment = false)]</span>
+    <span class="kw">pub</span> follower_id: <span class="ty">FollowerId</span>,  <span class="cmt">// the user doing the following</span>
+}
+</code></pre>
+
+<p>Now the same swap from before <strong>fails to compile</strong>:</p>
+
+<pre><code>user_follower::<span class="ty">Entity</span>::<span class="fn">find_by_id</span>((user_a.id, user_b.id));
+<span class="cmt">//                                        ^^^^^^^^^^  ^^^^^^^^^^</span>
+<span class="cmt">//                                        UserId      UserId</span>
+<span class="cmt">// expected (FollowedId, FollowerId), found (UserId, UserId)</span>
+
+<span class="cmt">// You have to be explicit about the role:</span>
+user_follower::<span class="ty">Entity</span>::<span class="fn">find_by_id</span>((
+    <span class="ty">FollowedId</span>(user_a.id),
+    <span class="ty">FollowerId</span>(user_b.id),
+)).<span class="fn">one</span>(db).<span class="kw">await</span>?;
+</code></pre>
+
+<h3>When to emit role wrappers</h3>
+
+<p>The codegen rule would be: <strong>whenever a single table has &gt;1 FK column pointing at the same parent PK</strong>, generate a per-column role wrapper for those columns rather than reusing the parent PK type directly. Examples:</p>
+
+<ul>
+<li><code>user_follower(user_id, follower_id)</code> — both FK to <code>users.id</code> → emit <code>FollowedId</code> + <code>FollowerId</code>.</li>
+<li><code>friendship(a, b)</code> — both FK to <code>users.id</code> → emit role wrappers based on column names.</li>
+<li><code>edge(source, target)</code> in a DAG — both FK to <code>node.id</code> → emit <code>SourceId</code> + <code>TargetId</code>.</li>
+</ul>
+
+<p>For the common case (single FK, e.g. <code>fruit.cake_id → cake.id</code>), the current behavior (reuse parent's <code>CakeId</code>) stays — no extra wrapper needed.</p>
+
+<h3>How the wrapper relates to the parent type</h3>
+
+<p>Two equally-valid implementations:</p>
+
+<div class="grid-two">
+<div class="finding">
+<h4>Option A: nested newtype (shown above)</h4>
+<pre><code><span class="kw">pub struct</span> <span class="ty">FollowerId</span>(<span class="kw">pub</span> <span class="ty">UserId</span>);
+</code></pre>
+<p>Holds the parent wrapper. <code>.0</code> gets you back to the <code>UserId</code>. <code>DeriveValueType</code> already supports this — it delegates everything to the inner type, so column-type, SQL serialization, <code>TryFromU64</code> all work transparently.</p>
+</div>
+<div class="finding">
+<h4>Option B: direct inner</h4>
+<pre><code><span class="kw">pub struct</span> <span class="ty">FollowerId</span>(<span class="kw">pub</span> <span class="ty">i32</span>);
+</code></pre>
+<p>Holds the raw scalar. <code>From&lt;UserId&gt;</code> and <code>From&lt;FollowerId&gt; for UserId</code> impls let users convert explicitly. More verbose at call sites but lighter on type machinery.</p>
+</div>
+</div>
+
+<p><strong>Option A is better</strong> — it composes cleanly with <code>DeriveValueType</code>'s existing delegation, and the user can write <code>follower.user_id.0</code> to get a <code>UserId</code>.</p>
+
+<h3>Why this is a meaningful upgrade</h3>
+
+<p>Self-ref junctions <strong>are</strong> the worst class of bug in this domain. They produce semantically-wrong rows with no DB-side complaint (the FK constraint accepts both directions). A code reviewer rarely catches the swap because both arguments are named <code>user_id</code>-shaped. Compile-time role enforcement turns a silent-wrong into a loud-wrong. This is the highest-leverage extension to the feature.</p>
+
+<h3>Cost</h3>
+
+<p>Roughly 50 lines in <code>EntityWriter::build_pk_newtype_index</code> to detect the same-parent-multiple-FKs case, plus tweaks to <code>Column::get_rs_type</code> to emit role wrappers in that case. The trybuild fixture is the same shape as the existing ones. No breaking change.</p>
+
+<h2 id="id-of-e">8. Deep-dive: <code>Id&lt;E&gt;</code> phantom-typed alternative</h2>
+
+<p>The reviewer claimed our per-table-struct approach is "the obvious-but-not-best translation" and that a single generic <code>Id&lt;E&gt;</code> would have been cleaner. Here's what that means in full.</p>
+
+<h3>What "phantom type" means</h3>
+
+<p>Rust has <code>std::marker::PhantomData&lt;T&gt;</code> — a zero-sized type parameter that exists only at the type level. It lets you parameterize a struct by a type you don't actually store. The classic use: making structurally-identical types distinct.</p>
+
+<p>An <code>Id&lt;E&gt;</code> is a wrapper around the entity's PK value, parameterized by the entity it belongs to. <code>Id&lt;cake::Entity&gt;</code> and <code>Id&lt;fruit::Entity&gt;</code> have the same memory layout (both are <code>i32</code> at runtime) but are different types at compile time.</p>
+
+<h3>The basic shape</h3>
+
+<pre><code><span class="cmt">// In sea-orm core:</span>
+<span class="kw">use</span> std::marker::<span class="ty">PhantomData</span>;
+
+<span class="att">#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]</span>
+<span class="kw">pub struct</span> <span class="ty">Id</span>&lt;<span class="ty">E</span>: <span class="ty">EntityTrait</span>&gt; {
+    <span class="kw">pub</span> value: &lt;<span class="ty">E</span>::<span class="ty">PrimaryKey</span> <span class="kw">as</span> <span class="ty">PrimaryKeyTrait</span>&gt;::<span class="ty">ValueType</span>,
+    _phantom: <span class="ty">PhantomData</span>&lt;<span class="ty">E</span>&gt;,
+}
+
+<span class="kw">impl</span>&lt;<span class="ty">E</span>: <span class="ty">EntityTrait</span>&gt; <span class="ty">Id</span>&lt;<span class="ty">E</span>&gt; {
+    <span class="kw">pub const fn</span> <span class="fn">new</span>(value: &lt;<span class="ty">E</span>::<span class="ty">PrimaryKey</span> <span class="kw">as</span> <span class="ty">PrimaryKeyTrait</span>&gt;::<span class="ty">ValueType</span>) -&gt; <span class="ty">Self</span> {
+        <span class="ty">Self</span> { value, _phantom: <span class="ty">PhantomData</span> }
+    }
+}
+</code></pre>
+
+<p>The <code>_phantom: PhantomData&lt;E&gt;</code> field is zero-sized at runtime — it disappears entirely. But to Rust's type checker it makes <code>Id&lt;cake::Entity&gt;</code> a fundamentally different type from <code>Id&lt;fruit::Entity&gt;</code>, even though both wrap an <code>i32</code>.</p>
+
+<h3>What user code looks like</h3>
+
+<pre><code><span class="kw">use</span> sea_orm::{<span class="ty">Id</span>, entity::prelude::*};
+
+<span class="kw">let</span> cake_id: <span class="ty">Id</span>&lt;cake::<span class="ty">Entity</span>&gt; = <span class="ty">Id</span>::<span class="fn">new</span>(<span class="num">7</span>);
+<span class="kw">let</span> fruit_id: <span class="ty">Id</span>&lt;fruit::<span class="ty">Entity</span>&gt; = <span class="ty">Id</span>::<span class="fn">new</span>(<span class="num">3</span>);
+
+cake::<span class="ty">Entity</span>::<span class="fn">find_by_id</span>(cake_id).<span class="fn">one</span>(db).<span class="kw">await</span>?;       <span class="cmt">// ok</span>
+<span class="err">cake::Entity::find_by_id(fruit_id)</span>;                  <span class="cmt">// expected Id&lt;cake&gt;, found Id&lt;fruit&gt;</span>
+</code></pre>
+
+<p>Same compile-time safety as our newtypes. But there's no per-entity struct definition required — every entity automatically has a type-safe ID just by being an <code>EntityTrait</code>.</p>
+
+<h3>What changes about codegen</h3>
+
+<p><strong>Almost nothing.</strong> The model struct just changes from <code>pub id: i32</code> to <code>pub id: Id&lt;Entity&gt;</code>. No standalone wrapper struct to emit, no <code>build_pk_newtype_index</code>, no <code>gen_pk_newtype_decls</code>. FK columns become <code>pub cake_id: Id&lt;super::cake::Entity&gt;</code>.</p>
+
+<h3>Why it's better</h3>
+
+<ul>
+<li><strong>One type to derive on, one type to teach.</strong> All the blanket impls (<code>Clone</code>, <code>Copy</code>, <code>Debug</code>, <code>Hash</code>, <code>Display</code>, <code>Serialize</code>, <code>Deserialize</code>, <code>ts_rs::TS</code>) are written <em>once</em> in sea-orm core and apply to every entity for free. Compare: with our newtypes, every wrapper has its own derive list and adversarial bug #5 happens because we forgot one.</li>
+
+<li><strong>Zero codegen surface.</strong> No <code>--with-pk-newtypes</code> flag needed. The whole feature collapses to "use <code>Id&lt;Entity&gt;</code> in your model field."</li>
+
+<li><strong>Zero collision risk.</strong> The wrapper isn't a named type per table. A <code>cake_id</code>-named table doesn't produce <code>CakeIdId</code>; it produces <code>Id&lt;cake_id::Entity&gt;</code>. No naming bugs possible.</li>
+
+<li><strong>Composite PKs are clean.</strong> <code>Id&lt;cake_filling::Entity&gt;</code> holds <code>(i32, i32)</code> as its inner — still type-distinct from <code>Id&lt;other_junction::Entity&gt;</code> even though both wrap the same tuple. No per-column code to generate.</li>
+
+<li><strong><code>Serialize</code>/<code>Deserialize</code> are blanket-derived once.</strong> When the inner <code>ValueType</code> is serializable, <code>Id&lt;E&gt;</code> transparently serializes as that value:
+<pre><code><span class="att">#[cfg(feature = <span class="str">"with-serde"</span>)]</span>
+<span class="kw">impl</span>&lt;<span class="ty">E</span>: <span class="ty">EntityTrait</span>&gt; <span class="ty">Serialize</span> <span class="kw">for</span> <span class="ty">Id</span>&lt;<span class="ty">E</span>&gt;
+<span class="kw">where</span> &lt;<span class="ty">E</span>::<span class="ty">PrimaryKey</span> <span class="kw">as</span> <span class="ty">PrimaryKeyTrait</span>&gt;::<span class="ty">ValueType</span>: <span class="ty">Serialize</span>
+{
+    <span class="kw">fn</span> <span class="fn">serialize</span>&lt;<span class="ty">S</span>: <span class="ty">Serializer</span>&gt;(&amp;<span class="kw">self</span>, s: <span class="ty">S</span>) -&gt; <span class="ty">Result</span>&lt;<span class="ty">S</span>::<span class="ty">Ok</span>, <span class="ty">S</span>::<span class="ty">Error</span>&gt; {
+        <span class="kw">self</span>.value.<span class="fn">serialize</span>(s)
+    }
+}</code></pre>
+This single block fixes adversarial bug #13 for every entity in the world. Our current per-table newtype design can't do that — each wrapper needs its own derive.</li>
+
+<li><strong>JSON wire format stays identical.</strong> <code>Id&lt;cake::Entity&gt;</code> serializes as just <code>7</code>, not <code>{"value": 7}</code>. Same on the input side.</li>
+
+<li><strong>The whole feature ships as a library type</strong>, not a CLI flag. Existing entities can opt in by changing one field's type.</li>
+</ul>
+
+<h3>The downsides of <code>Id&lt;E&gt;</code></h3>
+
+<ul>
+<li><strong>The type name is verbose at use sites.</strong> <code>Id&lt;cake::Entity&gt;</code> vs <code>CakeId</code>. Function signatures get longer:
+<pre><code><span class="kw">async fn</span> <span class="fn">lookup_cake</span>(id: <span class="ty">Id</span>&lt;cake::<span class="ty">Entity</span>&gt;) -&gt; <span class="ty">Cake</span> { ... }
+<span class="cmt">// vs</span>
+<span class="kw">async fn</span> <span class="fn">lookup_cake</span>(id: cake::<span class="ty">CakeId</span>) -&gt; <span class="ty">Cake</span> { ... }
+</code></pre>
+<strong>Mitigation:</strong> a one-line type alias in the entity module gives you the best of both worlds:
+<pre><code><span class="kw">pub type</span> <span class="ty">CakeId</span> = sea_orm::<span class="ty">Id</span>&lt;<span class="ty">Entity</span>&gt;;
+</code></pre>
+This alias is trivial codegen — one line per entity, vs an entire struct definition with derives.</li>
+
+<li><strong>Cross-entity conversion patterns differ.</strong> With our newtypes, FK fields are the parent's type directly: <code>pub cake_id: super::cake::CakeId</code>. With <code>Id&lt;E&gt;</code>, FK fields are <code>pub cake_id: Id&lt;super::cake::Entity&gt;</code>. Functionally equivalent — just longer at the source. With the alias trick, you can write <code>pub cake_id: super::cake::CakeId</code> and it's still <code>Id&lt;cake::Entity&gt;</code> under the hood.</li>
+
+<li><strong>Self-ref junction role-newtype problem is harder.</strong> You can't have <code>Id&lt;user::Entity, FollowerMarker&gt;</code> easily — adding a second phantom slot ripples through every API that takes <code>Id&lt;E&gt;</code>. The per-table struct approach is more flexible here. <strong>So if role newtypes (§7) are a goal, the codegen-struct path is actually better-suited.</strong></li>
+
+<li><strong>Existing entities can't easily migrate.</strong> A codebase already using <code>pub struct UserId(pub i32);</code> would have to change every <code>UserId</code> to <code>Id&lt;user::Entity&gt;</code>. Newtypes can be added as gradual additions.</li>
+
+<li><strong>Documentation footprint.</strong> <code>Id&lt;E&gt;</code> needs its own dedicated docs page explaining phantom-typed wrappers, blanket impls, etc. Per-table newtypes are more discoverable because they show up in the entity module's namespace.</li>
+</ul>
+
+<h3>Why we didn't take this path</h3>
+
+<p>Honest answer: I followed the existing trail. The OP's #1310 proposal said "per-entity wrapper type." <code>DeriveValueType</code> was already in place. The path of least resistance was per-table structs.</p>
+
+<p>If we were starting from scratch with no prior art, <strong><code>Id&lt;E&gt;</code> is probably the better core design</strong> and per-table aliases (<code>pub type CakeId = Id&lt;Entity&gt;;</code>) are the right ergonomic veneer. The role-newtype case (§7) is the one area where named structs win, and codegen could emit role wrappers <em>on top</em> of the <code>Id&lt;E&gt;</code> base for junction tables specifically.</p>
+
+<h3>The hybrid design (best of both)</h3>
+
+<p>A v2 of the feature could combine all three:</p>
+
+<ol>
+<li><strong>Core:</strong> <code>sea_orm::Id&lt;E&gt;</code> as a library type with blanket impls.</li>
+<li><strong>Ergonomic veneer:</strong> codegen emits <code>pub type CakeId = Id&lt;Entity&gt;;</code> per entity. One-line alias, no collision possible.</li>
+<li><strong>Role layer:</strong> for self-ref junctions, codegen emits standalone wrapper structs (<code>FollowedId</code>, <code>FollowerId</code>) <em>on top of</em> the <code>Id&lt;E&gt;</code> core. Distinct types per role.</li>
+</ol>
+
+<p>This design gives you every win:</p>
+
+<ul>
+<li>Cross-entity safety from the phantom parameter ✓</li>
+<li>Free blanket impls (<code>Serialize</code>, <code>Display</code>, <code>Copy</code>) ✓</li>
+<li>Ergonomic short names (<code>CakeId</code>, not <code>Id&lt;cake::Entity&gt;</code>) ✓</li>
+<li>Positional safety inside self-ref junctions ✓</li>
+<li>Zero naming-collision risk on the core (only the role wrappers have to worry about it) ✓</li>
+</ul>
+
+<div class="verdict-box">
+<p><strong>Net design verdict:</strong> a future v2 of this feature should start with <code>sea_orm::Id&lt;E&gt;</code>, generate per-table <code>type CakeId = Id&lt;cake::Entity&gt;;</code> aliases for ergonomics, and emit standalone role-newtype structs for self-ref junctions. That's the design we'd ship if we had the chance to do it again.</p>
+</div>
+
+<h2 id="findings-detailed">9. Detailed findings with worked examples</h2>
+
+<p>This section expands every reviewer concern with a concrete scenario, so it's clear how each one comes up in practice — not just as an abstract risk.</p>
+
+<!-- ====== Finding 1 ====== -->
+<div class="finding">
+<div class="finding-head"><strong>Finding 1 — Multi-FK column overwrite</strong><span class="pill pill-fix">SHOULD-FIX</span></div>
+
+<p class="label">What it is</p>
+<p>A single SQL column can be constrained against two different parent tables in the same <code>CREATE TABLE</code>. This is legal SQL — both FKs must hold for any inserted value. Our codegen models per-column FK back-references with a scalar <code>Option&lt;String&gt;</code>, so when the transformer walks the relations, the second FK silently overwrites the first.</p>
+
+<p class="label">When it comes up in practice</p>
+<p>The most realistic case is a <strong>data migration period</strong> where a system is moving from one parent table to another, but the old constraint is left in place for safety. Example: you're migrating from <code>legacy_users(id)</code> to <code>users(id)</code>. During the transition, a child table might validly carry both FKs:</p>
+
+<pre><code><span class="kw">CREATE TABLE</span> session (
+    id <span class="ty">INTEGER PRIMARY KEY</span>,
+    actor_id <span class="ty">INTEGER NOT NULL</span>,
+    <span class="kw">FOREIGN KEY</span> (actor_id) <span class="kw">REFERENCES</span> users(id),
+    <span class="kw">FOREIGN KEY</span> (actor_id) <span class="kw">REFERENCES</span> legacy_users(id)
+);
+</code></pre>
+
+<p>If you generate entities with <code>--with-pk-newtypes</code> against this schema, codegen will pick one parent and emit a wrapper from it. Whichever loses is a silent type confusion — code that tries to assign <code>session.actor_id</code> to a function expecting the lost type fails at runtime in unpredictable ways.</p>
+
+<p class="label">Less common but more dangerous</p>
+<p>A more practical reason this shows up: <strong>some ORMs and migration tools emit duplicate FK constraints</strong> when the user runs multiple migrations that all add the same constraint. The database accepts duplicates as long as the columns/names differ. Codegen sees both and silently picks one.</p>
+
+<p class="label">Fix</p>
+<p>Change <code>Column::ref_table</code> from <code>Option&lt;String&gt;</code> to <code>Vec&lt;(String, String)&gt;</code>. Under <code>--with-pk-newtypes</code>, either error out ("ambiguous — please disambiguate") or pick a documented winner (first-by-name) and emit a comment in the generated code.</p>
+</div>
+
+<!-- ====== Finding 2 ====== -->
+<div class="finding">
+<div class="finding-head"><strong>Finding 2 — <code>&lt;Table&gt;Id</code> wrapper naming has degenerate edge cases</strong><span class="pill pill-fix">SHOULD-FIX</span></div>
+
+<p class="label">What it is</p>
+<p>Codegen generates the wrapper name as <code>format!("{}Id", table_camel)</code> for unary PKs, or uses the column-camel-case verbatim when the column ends in "Id" (composite PKs). Edge cases:</p>
+
+<ul>
+<li><strong>Table ending in <code>_id</code>:</strong> <code>cake_id</code> → wrapper <code>CakeIdId</code></li>
+<li><strong>Composite PK with column literally named <code>id</code>:</strong> wrapper named <code>Id</code> (collides with <code>sea_orm::Id</code> if it ever ships, and is a generic-sounding name that's painful to read)</li>
+<li><strong>Composite PK with column ending in <code>Id</code>:</strong> wrapper reuses the camel name; <code>tag_id</code> → <code>TagId</code> globally, which could collide with a different table's wrapper</li>
+</ul>
+
+<p class="label">When it comes up in practice</p>
+<p><strong>Tables ending in <code>_id</code> are common in junction/lookup tables.</strong> Examples:</p>
+
+<ul>
+<li><code>session_token_id</code> — a lookup table mapping session ids to token ids</li>
+<li><code>discord_id_to_user_id</code> — an integration mapping table</li>
+<li><code>external_account_id</code> — a table whose primary entity is itself an ID</li>
+</ul>
+
+<p>The <code>id</code>-named-column-in-composite case is even more common. Picture a junction table with two PK columns:</p>
+
+<pre><code><span class="kw">CREATE TABLE</span> association (
+    id <span class="ty">INTEGER</span>,
+    secondary_id <span class="ty">INTEGER</span>,
+    <span class="kw">PRIMARY KEY</span> (id, secondary_id)
+);
+</code></pre>
+
+<p>Codegen produces <code>pub struct Id(pub i32)</code> and <code>pub struct SecondaryId(pub i32)</code> inside <code>mod association</code>. A bare <code>Id</code> identifier at the module-top level is awful: it collides with anything anyone might glob-import as <code>Id</code>, including a hypothetical <code>sea_orm::Id&lt;E&gt;</code>.</p>
+
+<p class="label">Fix</p>
+<p>The OP's #1310 convention solved this — always prefix with the table name: <code>AssociationId</code>, <code>AssociationSecondaryId</code>. Slightly verbose but no collisions.</p>
+</div>
+
+<!-- ====== Finding 3 ====== -->
+<div class="finding">
+<div class="finding-head"><strong>Finding 3 — Auto-increment heuristic regression on type aliases</strong><span class="pill pill-fix">SHOULD-FIX</span></div>
+
+<p class="label">What it is</p>
+<p>Phase 2 replaced the suffix denylist (<code>String</code>, <code>Uuid</code>) with a positive allowlist of literal integer type names (<code>i8/i16/i32/.../usize</code>). The check is purely textual — it sees the post-<code>quote!{#ty}</code> string. So <code>type LegacyUserId = i32; pub id: LegacyUserId;</code> sees the text <code>"LegacyUserId"</code> and defaults <code>auto_increment = false</code>, even though the underlying type is <code>i32</code>.</p>
+
+<p class="label">When it comes up in practice</p>
+<p>Anyone using type aliases for documentation hygiene. This is a real Rust pattern:</p>
+
+<pre><code><span class="cmt">// in some shared types crate</span>
+<span class="kw">pub type</span> <span class="ty">UserId</span> = <span class="ty">i32</span>;
+<span class="kw">pub type</span> <span class="ty">TenantId</span> = <span class="ty">i64</span>;
+
+<span class="cmt">// in the entity</span>
+<span class="att">#[sea_orm(primary_key)]</span>
+<span class="kw">pub</span> id: <span class="ty">UserId</span>,    <span class="cmt">// previously: auto_increment defaulted true</span>
+                  <span class="cmt">// now: auto_increment defaults false — silent regression</span>
+</code></pre>
+
+<p>The runtime consequence: the user's INSERT statements used to omit the PK column and let the DB assign one. After regen, the macro emits no <code>auto_increment</code> in the entity's column def. Schema sync (if the user uses entity-first workflow) will now generate a non-autoincrement column. Or, if the DB column is already autoincrement, the entity's understanding of it desyncs from the DB.</p>
+
+<p>The CLI sidesteps this because it explicitly emits <code>auto_increment</code> on the codegen output. But hand-written entities that previously used type aliases break silently.</p>
+
+<p class="label">Fix</p>
+<p>Macros can't resolve type aliases (no type info at macro time), so the heuristic <em>has</em> to be textual. Two options:</p>
+<ol>
+<li>Restore the suffix denylist as a fallback: if the type name doesn't appear in the allowlist <em>and</em> doesn't end in <code>"String"</code>/<code>"Uuid"</code>, default to autoincrement. Less aggressive about type-alias deprecation but preserves the common pattern.</li>
+<li>Emit a <code>compile_error!</code> when a PK type name doesn't appear in the allowlist, with a hint: "if your PK type is an integer alias, please add <code>#[sea_orm(primary_key, auto_increment)]</code> explicitly."</li>
+</ol>
+</div>
+
+<!-- ====== Finding 4 ====== -->
+<div class="finding">
+<div class="finding-head"><strong>Finding 4 — <code>find_by_id</code> tightening blast radius</strong><span class="pill pill-fix">SHOULD-FIX</span></div>
+
+<p class="label">What it is</p>
+<p>The old signature was <code>find_by_id&lt;T: Into&lt;ValueType&gt;&gt;(values: T)</code>. The new signature is <code>find_by_id(values: ValueType)</code>. The <code>Into</code> bound let callers pass any integer that could coerce into the PK type — <code>find_by_id(1u8)</code> worked because <code>u8: Into&lt;i32&gt;</code>.</p>
+
+<p class="label">When it comes up in practice</p>
+<p>Anywhere ID values come from a <em>different</em> width than the PK's storage type. Examples:</p>
+
+<ul>
+<li>API handlers parsing path parameters as <code>u32</code> (URL convention) but storing as <code>i32</code> (signed-integer DB column)</li>
+<li>Counters or sequence values held as <code>u64</code> being passed to a query against an <code>i64</code>-PK table</li>
+<li>Test fixtures using bare integer literals like <code>find_by_id(1)</code> — adversarial test confirms bare literals still infer correctly, but explicit <code>1_i64</code> against an <code>i32</code> PK now breaks</li>
+</ul>
+
+<p class="label">Adversarial test result</p>
+<pre class="test-output"><code>error[E0308]: mismatched types
+   --&gt; tests/find_by_id_breaking_change.rs:18:38
+    |
+18  |     cake::Entity::find_by_id(1u8);
+    |     ------------------------ ^^^ expected `i32`, found `u8`
+    |     |
+    |     arguments to this function are incorrect
+</code></pre>
+
+<p class="label">Fix</p>
+<p>Three workable paths, ranked:</p>
+<ol>
+<li><strong>Revert universal tightening, add <code>find_by_id_strict</code></strong>. Best option: zero breakage, both signatures available, codegen-newtype docs recommend the strict form.</li>
+<li>Keep tightening, accept the breakage. Cleanest API surface but users get punished for not opting in to the new feature.</li>
+<li>Cargo feature flag. Worst option due to Cargo feature unification — a single non-opting transitive dep drags everyone back to lenient.</li>
+</ol>
+</div>
+
+<!-- ====== Finding 5 ====== -->
+<div class="finding">
+<div class="finding-head"><strong>Finding 5 — <code>--with-pk-newtypes --with-serde</code> generates non-compiling code</strong><span class="pill pill-fix">SHOULD-FIX</span></div>
+
+<p class="label">What it is</p>
+<p>Under <code>--with-serde both</code>, the Model gets <code>derive(Serialize, Deserialize)</code>. But the PK wrapper struct does NOT — its derive list is hardcoded to <code>(Clone, Debug, PartialEq, Eq, Hash, DeriveValueType)</code>. The result: the Model fails to compile because its field type doesn't implement Serialize.</p>
+
+<p class="label">Adversarial test result</p>
+<pre class="test-output"><code>error[E0277]: the trait bound `FooId: serde::Deserialize&lt;'de&gt;` is not satisfied
+  --&gt; src/foo.rs:9:5
+   |
+ 9 |     pub id: FooId,
+   |     ^^^^^^^^^^^^^ the trait `Deserialize&lt;'de&gt;` is not implemented for `FooId`
+</code></pre>
+
+<p class="label">When it comes up in practice</p>
+<p>Anyone using SeaORM with a JSON API surface. <code>--with-serde both</code> is the recommended flag for full-stack Rust+TypeScript projects. The combination just doesn't work today.</p>
+
+<p class="label">Fix</p>
+<p>Propagate the <code>--with-serde</code> derives to the wrapper struct in <code>gen_pk_newtype_decls</code>. Trivial fix in <code>EntityWriter</code>. Also propagate <code>--ts-rs</code> when that feature exists. Note: the <code>Id&lt;E&gt;</code> design in §8 makes this problem disappear entirely — a single blanket impl in sea-orm core handles all entities.</p>
+</div>
+
+<!-- ====== Finding 6 ====== -->
+<div class="finding">
+<div class="finding-head"><strong>Finding 6 — Stale .rs files on dropped tables</strong><span class="pill pill-fix">SHOULD-FIX</span></div>
+
+<p class="label">What it is</p>
+<p>When a table is dropped and entities are regenerated, the codegen:</p>
+<ul>
+<li>Rewrites the dependent entities' FK columns back to raw types ✓</li>
+<li>Removes the deleted table from <code>mod.rs</code> ✓</li>
+<li><strong>Leaves the orphan <code>.rs</code> file on disk</strong> ✗</li>
+</ul>
+
+<p class="label">When it comes up in practice</p>
+<p>A normal evolutionary workflow: developer drops <code>legacy_users</code> in a migration, regenerates entities. The new <code>mod.rs</code> doesn't list <code>pub mod legacy_users</code>, so the file is unreachable from <code>main.rs</code> — but it's still in the repo. On the next regen if anyone re-adds a same-named table, the old file gets overwritten partially, leaving stale wrapper definitions.</p>
+
+<p>This is a pre-existing codegen behavior, not introduced by newtypes. But newtypes make it more visible because the wrapper structs (which a user might reference from business logic outside the entity tree) lingered without indication.</p>
+
+<p class="label">Fix</p>
+<p>Either delete orphan files explicitly during regen, or write a clear comment at the top of generated <code>mod.rs</code> listing the tables that were dropped on this run.</p>
+</div>
+
+<!-- ====== Finding 7 ====== -->
+<div class="finding">
+<div class="finding-head"><strong>Finding 7 — Same-type self-ref junctions don't catch swaps</strong><span class="pill pill-fix">SHOULD-FIX</span></div>
+
+<p class="label">What it is</p>
+<p>See §7 above. Both columns of a self-ref junction get the same parent PK type (<code>UserId</code>), so calling <code>find_by_id((a, b))</code> versus <code>find_by_id((b, a))</code> typechecks both ways.</p>
+
+<p class="label">When it comes up in practice</p>
+<p>Self-referential junction tables exist in many domains:</p>
+<ul>
+<li>Social: <code>user_follower</code>, <code>friendship</code></li>
+<li>Org charts: <code>employee_manager</code></li>
+<li>Permissions: <code>role_inherits_from_role</code></li>
+<li>Graphs/DAGs: <code>edge(source, target)</code></li>
+<li>Family trees: <code>parent_child</code>, <code>partnership</code></li>
+</ul>
+
+<p>The wrong-direction bug shows up when you fetch or insert a relationship row using arguments in the wrong order. The DB constraint accepts both directions (both columns reference the same table). There's no error from the DB and no warning from the type system. The user sees wrong-shaped data and has to debug from the user-visible symptom backwards.</p>
+
+<p class="label">Fix</p>
+<p>Role newtypes per §7. ~50 lines of codegen, no breaking change, clean addition.</p>
+</div>
+
+<!-- ====== Finding 8 ====== -->
+<div class="finding">
+<div class="finding-head"><strong>Finding 8 — Wrapper struct doesn't derive <code>Copy</code> on codegen output</strong><span class="pill pill-nice">NICE-TO-HAVE</span></div>
+
+<p class="label">What it is</p>
+<p>The hand-edited adoption examples (in <code>examples/basic/src/entity/cake.rs</code>) include <code>Copy</code> in the derive list. The codegen output (from <code>EntityWriter::gen_pk_newtype_decls</code>) does NOT include <code>Copy</code>. This is a divergence between dogfooded code and what users will get.</p>
+
+<p class="label">When it comes up in practice</p>
+<p>Any business code that holds an ID variable and passes it to multiple functions. Without <code>Copy</code>, every pass-through requires <code>.clone()</code>:</p>
+
+<pre><code><span class="kw">let</span> id = cake::<span class="ty">CakeId</span>(<span class="num">7</span>);
+cake::<span class="ty">Entity</span>::<span class="fn">find_by_id</span>(id).<span class="fn">one</span>(db).<span class="kw">await</span>?;       <span class="cmt">// moves id</span>
+<span class="kw">let</span> related = fruit::<span class="ty">Entity</span>::<span class="fn">find</span>().<span class="fn">filter</span>(...);
+<span class="err">println!("{:?}", id);</span>  <span class="cmt">// borrow of moved value</span>
+</code></pre>
+
+<p>Workaround is just <code>let id = cake::CakeId(7); cake::Entity::find_by_id(id.clone())</code> — annoying noise that breaks the "ids are just like numbers" mental model.</p>
+
+<p class="label">Fix</p>
+<p>When the inner type is <code>Copy</code> (integer types, UUID, etc.), emit <code>Copy</code> in the wrapper's derive list. Simple type-name check in codegen.</p>
+</div>
+
+<!-- ====== Finding 9 ====== -->
+<div class="finding">
+<div class="finding-head"><strong>Finding 9 — Wrapper struct doesn't derive <code>Display</code></strong><span class="pill pill-nice">NICE-TO-HAVE</span></div>
+
+<p class="label">What it is</p>
+<p><code>Display</code> is not derived. Anyone wanting to format an ID for logs has to use <code>{:?}</code> (which produces <code>CakeId(7)</code> instead of just <code>7</code>) or write a manual impl.</p>
+
+<p class="label">When it comes up in practice</p>
+<p>Logging. Tracing spans. URL path generation. JSON error messages. These all want the inner value, not <code>CakeId(7)</code>:</p>
+
+<pre><code>tracing::<span class="fn">info!</span>(cake_id = ?id, <span class="str">"cake fetched"</span>);     <span class="cmt">// emits "cake_id=CakeId(7)" — verbose, wrong-looking</span>
+tracing::<span class="fn">info!</span>(cake_id = %id, <span class="str">"cake fetched"</span>);     <span class="cmt">// error: Display not implemented</span>
+
+<span class="kw">let</span> url = <span class="fn">format!</span>(<span class="str">"/cakes/{}"</span>, cake_id);          <span class="cmt">// error: Display not implemented</span>
+<span class="kw">let</span> url = <span class="fn">format!</span>(<span class="str">"/cakes/{}"</span>, cake_id.<span class="num">0</span>);        <span class="cmt">// works but leaks the wrapper</span>
+</code></pre>
+
+<p class="label">Fix</p>
+<p>Either auto-derive <code>Display</code> when the inner type is <code>Display</code>, or add a <code>--with-pk-newtypes-display</code> flag, or generate a manual <code>impl Display</code> when the inner is a known display-able type.</p>
+</div>
+
+<!-- ====== Finding 10 ====== -->
+<div class="finding">
+<div class="finding-head"><strong>Finding 10 — <code>strip_optional</code> is a string round-trip</strong><span class="pill pill-nice">NICE-TO-HAVE</span></div>
+
+<p class="label">What it is</p>
+<p>In <code>EntityWriter::gen_pk_newtype_decls</code>, we need the bare inner type for the wrapper declaration (the wrapper holds <code>i32</code>, not <code>Option&lt;i32&gt;</code>, even if the column is theoretically nullable). The implementation serializes the <code>TokenStream</code> to a string, searches for <code>"Option<"</code>, strips it, and parses back.</p>
+
+<p class="label">Why it's brittle</p>
+<p><code>TokenStream::to_string()</code> formatting is not API-stable across <code>proc-macro2</code> versions. If a user shadowed <code>Option</code> or aliased it (unusual but legal), the substring match would fail or false-positive. The <code>unwrap_or(ts)</code> fallback silently hides any error.</p>
+
+<p class="label">When it would actually bite</p>
+<p>Realistically? Rarely. PK columns are never <code>NULL</code> so the <code>Option</code> wrap never happens for them in real schemas. The code path is defensive — it'd matter only if a future codegen change started wrapping more aggressively.</p>
+
+<p class="label">Fix</p>
+<p>Have <code>Column::get_rs_type</code> take an <code>emit_optional: bool</code> flag, and call it with <code>false</code> when emitting the wrapper. No post-hoc parsing needed.</p>
+</div>
+
+<!-- ====== Finding 11 ====== -->
+<div class="finding">
+<div class="finding-head"><strong>Finding 11 — <code>Rc&lt;HashMap&gt;</code> vs <code>Arc</code></strong><span class="pill pill-oos">OUT-OF-SCOPE</span></div>
+
+<p class="label">What it is</p>
+<p><code>PkNewtypeIndex</code> is wrapped in <code>Rc</code>. The reviewer flagged this might be a problem if codegen is ever called from a multi-threaded context.</p>
+
+<p class="label">Why it's actually fine</p>
+<p><code>proc_macro2::TokenStream</code> is <code>!Send</code>. Codegen is fundamentally single-threaded — there's no async server tooling case where this matters. <code>Rc</code> is the right choice.</p>
+
+<p class="label">Fix</p>
+<p>Add a comment in <code>writer.rs</code> explaining why <code>Rc</code> over <code>Arc</code> is intentional. No code change needed.</p>
+</div>
+
+<!-- ====== Finding 12 ====== -->
+<div class="finding">
+<div class="finding-head"><strong>Finding 12 — Cross-entity bug class is narrow but real</strong><span class="pill pill-design">DESIGN</span></div>
+
+<p class="label">What it is</p>
+<p>The headline benefit — "type-safe IDs prevent cross-entity confusion" — is real but narrow. Variable names usually catch <code>find_by_id(post_id)</code> on a <code>user::Entity</code> at code review. The actual class of bug newtypes catch best is:</p>
+
+<ol>
+<li><strong>Function parameters where both types are <code>i32</code>:</strong> <code>fn revoke_session(user_id: i32, session_id: i32)</code> — swapping the arguments at the call site is silent. With newtypes (<code>UserId</code>, <code>SessionId</code>) it's caught at compile.</li>
+<li><strong>Multi-PK tuples with distinct columns:</strong> <code>find_by_id((post_id, tag_id))</code> vs <code>find_by_id((tag_id, post_id))</code> — caught when the types differ.</li>
+<li><strong>Refactor blast radius:</strong> when you change a function from accepting "the cake id" to "the fruit id", every caller has to update or get a compile error.</li>
+</ol>
+
+<p class="label">Industry comparison</p>
+<table>
+<thead><tr><th>Language</th><th>Approach</th><th>Cost</th></tr></thead>
+<tbody>
+<tr><td>TypeScript</td><td>Branded types: <code>type UserId = number &amp; { __brand: 'User' }</code></td><td>Zero runtime cost, no constructor noise</td></tr>
+<tr><td>Diesel (Rust)</td><td>Convention only — user writes <code>pub struct UserId(pub i32)</code> themselves</td><td>No codegen, user friction</td></tr>
+<tr><td>Haskell</td><td>Phantom-tagged: <code>Id User</code>, <code>Id Post</code></td><td>One generic type, blanket impls free</td></tr>
+<tr><td>SeaORM (us)</td><td>Per-entity newtype struct via codegen</td><td>Real safety + many small structs</td></tr>
+</tbody>
+</table>
+
+<p class="label">Verdict</p>
+<p>Not best-in-class but workmanlike. See §8 (<code>Id&lt;E&gt;</code>) for the better design we missed.</p>
+</div>
+
+<!-- ====== Finding 13 ====== -->
+<div class="finding">
+<div class="finding-head"><strong>Finding 13 — Composite PK has no tuple-level wrapper</strong><span class="pill pill-nice">DOC-ONLY</span></div>
+
+<p class="label">What it is</p>
+<p>Composite PKs use per-column newtypes (e.g. <code>cake_filling</code> has <code>cake_id: CakeId</code>, <code>filling_id: FillingId</code>) but the <code>ValueType</code> is still a tuple <code>(CakeId, FillingId)</code>. There's no single <code>CakeFillingPk</code> type to thread through APIs.</p>
+
+<p class="label">When it comes up in practice</p>
+<p>Junction-heavy domains. If you want a function <code>fn delete_link(id: cake_filling::CakeFillingPk)</code>, you have to write <code>fn delete_link(id: (CakeId, FillingId))</code> instead. Works fine but slightly less ergonomic, and "the PK of a junction row" doesn't have a name you can use in docstrings.</p>
+
+<p class="label">Verdict</p>
+<p>Document the pattern. Composite-PK wrappers could be added later without breaking change.</p>
+</div>
+
+<h2 id="adversarial">10. Adversarial tests — proof these are real</h2>
+
+<p>Two parallel agents wrote failing tests and ran them. Here are the verdicts:</p>
+
+<table>
+<thead><tr><th>#</th><th>Target</th><th>Result</th><th>Where</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>Multi-FK overwrite</td><td><span class="pill pill-confirmed">BUG CONFIRMED</span></td><td><code>sea-orm-codegen/src/entity/transformer.rs::tests::multi_fk_same_column_records_both_backrefs</code></td></tr>
+<tr><td>2</td><td>Table named <code>cake_id</code> → <code>CakeIdId</code></td><td><span class="pill pill-confirmed">BUG CONFIRMED</span></td><td><code>sea-orm-codegen/src/entity/writer.rs::tests::pk_newtype_table_named_cake_id_produces_weird_wrapper</code></td></tr>
+<tr><td>3</td><td>Composite PK with bare <code>id</code> column → wrapper <code>Id</code></td><td><span class="pill pill-confirmed">BUG CONFIRMED</span></td><td><code>sea-orm-codegen/src/entity/writer.rs::tests::pk_newtype_composite_with_bare_id_column_produces_bare_id_wrapper</code></td></tr>
+<tr><td>4</td><td>Type-alias PK silently flips auto_increment</td><td><span class="pill pill-confirmed">BUG CONFIRMED</span></td><td><code>sea-orm-macros/tests/pk_newtype_review_tests.rs::alias_pk_should_still_be_auto_increment</code></td></tr>
+<tr><td>5</td><td>DeriveValueType over non-allowlist inner type breaks compile</td><td><span class="pill pill-norepro">NOT REPRODUCIBLE</span></td><td>Concern was theoretical; macro is conservative enough</td></tr>
+<tr><td>6</td><td>Same-type self-ref junction PK swap typechecks</td><td><span class="pill pill-confirmed">BUG CONFIRMED</span></td><td><code>tests/pk_newtype_self_ref_review.rs::self_ref_junction_pk_swap_typechecks</code></td></tr>
+<tr><td>7</td><td>UUID PK newtype DB round-trip</td><td><span class="pill pill-norepro">NOT REPRODUCIBLE</span></td><td><code>tests/value_type_tests.rs::insert_value_uuid_pk</code> — round-trip works; test was just missing, now present and green</td></tr>
+<tr><td>8</td><td><code>find_by_id(1u8)</code> / <code>find_by_id(1i64)</code> no longer compile</td><td><span class="pill pill-confirmed">BREAKAGE CONFIRMED</span></td><td><code>tests/find_by_id_breaking_change.rs</code></td></tr>
+<tr><td>9</td><td>Bare <code>find_by_id(1)</code> still works via inference</td><td><span class="pill pill-design">AS DESIGNED</span></td><td>Same file — bare literal infers to <code>i32</code> happily</td></tr>
+<tr><td>10</td><td>CLI emits <code>auto_increment</code> explicitly</td><td><span class="pill pill-design">AS DESIGNED</span></td><td>Generated <code>foo.rs</code> contains <code>#[sea_orm(primary_key, auto_increment)]</code></td></tr>
+<tr><td>11</td><td>Type-alias <code>type FooId = i32</code> + hand-written entity defaults to auto_increment=false</td><td><span class="pill pill-confirmed">BUG CONFIRMED</span></td><td><code>/tmp/heur_test</code> reproduction</td></tr>
+<tr><td>12</td><td>Regen after dropping parent table leaves stale <code>.rs</code></td><td><span class="pill pill-confirmed">BUG CONFIRMED</span></td><td><code>/tmp/adv2_out/</code> retains <code>a.rs</code> after DROP TABLE</td></tr>
+<tr><td>13</td><td><code>--with-pk-newtypes --with-serde both</code> fails to compile</td><td><span class="pill pill-confirmed">BUG CONFIRMED</span></td><td>Wrapper missing <code>Serialize</code>/<code>Deserialize</code> derives</td></tr>
+</tbody>
+</table>
+
+<h3>Sample adversarial output: multi-FK overwrite</h3>
+
+<pre class="test-output"><code>multi-FK back-ref => ref_table=Some("legacy_users") ref_column=Some("id")
+thread 'entity::transformer::tests::multi_fk_same_column_records_both_backrefs'
+  panicked at sea-orm-codegen/src/entity/transformer.rs:564:9:
+assertion failed: back-ref was Some("legacy_users")
+</code></pre>
+
+<h3>Sample adversarial output: wrapper naming</h3>
+
+<pre class="test-output"><code>// generated:
+pub struct CakeIdId(pub i32);
+
+pub struct Model {
+    #[sea_orm(primary_key, auto_increment)]
+    pub id: CakeIdId,
+}
+</code></pre>
+
+<pre class="test-output"><code>// generated for composite PK with cols "id" + "secondary_id":
+pub struct Id(pub i32);
+pub struct SecondaryId(pub i32);
+
+pub struct Model {
+    #[sea_orm(primary_key, auto_increment = false)] pub id: Id,
+    #[sea_orm(primary_key, auto_increment = false)] pub secondary_id: SecondaryId,
+}
+</code></pre>
+
+<h3>Sample adversarial output: <code>find_by_id</code> blast radius</h3>
+
+<pre class="test-output"><code>error[E0308]: mismatched types
+   --&gt; tests/find_by_id_breaking_change.rs:18:38
+    |
+18  |     cake::Entity::find_by_id(1u8);
+    |     ------------------------ ^^^ expected `i32`, found `u8`
+
+error[E0308]: mismatched types  --&gt; line 19 (1i64)
+error[E0308]: mismatched types  --&gt; line 20 (1u32)
+error[E0308]: mismatched types  --&gt; line 21 (1i16)
+</code></pre>
+
+<h3>Sample adversarial output: <code>--with-serde</code> combo broken</h3>
+
+<pre class="test-output"><code>error[E0277]: the trait bound `FooId: serde::Deserialize&lt;'de&gt;` is not satisfied
+  --&gt; src/foo.rs:9:5
+   |
+ 9 |     pub id: FooId,
+   |     ^^^^^^^^^^^^^ the trait `Deserialize&lt;'de&gt;` is not implemented for `FooId`
+
+error[E0277]: the trait bound `FooId: serde::Serialize` is not satisfied
+  --&gt; src/foo.rs:9:5
+   |
+ 9 |     pub id: FooId,
+   |     ^^^^^^^^^^^^^ the trait `Serialize` is not implemented for `FooId`
+</code></pre>
+
+<h2 id="fix-plan">11. Plan to fix the remaining items</h2>
+
+<p>Ordered by leverage. Each step is independent — you can pick any prefix of the list and ship that.</p>
+
+<h3>Step 1 — Revert <code>find_by_id</code> universal tightening, add <code>find_by_id_strict</code></h3>
+<ul>
+<li>Files: <code>src/entity/base_entity.rs:292+</code>, <code>src/entity/compound.rs:22+</code></li>
+<li>Restore the old <code>T: Into&lt;ValueType&gt;</code> bound on <code>find_by_id</code> and <code>filter_by_id</code>.</li>
+<li>Add new methods <code>find_by_id_strict</code> and <code>filter_by_id_strict</code> that take <code>ValueType</code> exactly.</li>
+<li>Update <code>tests/value_type_pk_compile_fail/</code> trybuild fixtures to call the strict variants — the safety contract is preserved.</li>
+<li>Update <code>--with-pk-newtypes</code> docs/CLI help to recommend the strict variant.</li>
+<li><strong>Cost:</strong> ~30 lines, no other code changes. Reverts the breaking part of commit <code>ec48d8b7</code> while preserving the safety story.</li>
+</ul>
+
+<h3>Step 2 — Propagate <code>--with-serde</code> derives to the wrapper</h3>
+<ul>
+<li>File: <code>sea-orm-codegen/src/entity/writer.rs</code> — <code>gen_pk_newtype_decls</code></li>
+<li>Read <code>context.with_serde</code> and emit <code>Serialize</code>/<code>Deserialize</code> in the wrapper's derive list when appropriate.</li>
+<li>Same for any other serializer feature in scope.</li>
+<li>Adds an integration test that <code>--with-pk-newtypes --with-serde both</code> generates code that compiles and serializes to the same JSON shape as the underlying inner value.</li>
+<li><strong>Cost:</strong> ~20 lines. Fixes adversarial bug #13 immediately.</li>
+</ul>
+
+<h3>Step 3 — Fix wrapper naming for <code>_id</code>-ending tables and bare <code>id</code> columns</h3>
+<ul>
+<li>File: <code>sea-orm-codegen/src/entity/writer.rs::build_pk_newtype_index</code></li>
+<li>Change the naming rule:
+<ul>
+<li>Always prefix with the table name in camel case.</li>
+<li>If <code>format!("{}Id", table_camel)</code> would end in <code>"IdId"</code>, fall back to <code>format!("{}Pk", table_camel)</code> or strip the duplicate suffix.</li>
+<li>For composite PKs, use <code>format!("{}{}", table_camel, column_camel)</code> with the column camel never being bare <code>"Id"</code>.</li>
+</ul></li>
+<li>Update the existing snapshot test in <code>writer.rs</code> and the adversarial tests (which currently capture the buggy output).</li>
+<li><strong>Cost:</strong> ~40 lines + test updates.</li>
+</ul>
+
+<h3>Step 4 — Switch <code>Column::ref_table</code> to <code>Vec&lt;(String, String)&gt;</code></h3>
+<ul>
+<li>Files: <code>sea-orm-codegen/src/entity/column.rs</code>, <code>transformer.rs</code></li>
+<li>Change the field type. Push instead of overwrite in the transformer.</li>
+<li>In <code>Column::get_rs_type</code>, when emitting the FK type and there are multiple refs, either pick the first (documented) or error out under <code>--with-pk-newtypes</code>.</li>
+<li>Adversarial test #1 already exists — flip it from <code>assertion failed</code> to <code>assert!(!refs.is_empty())</code>.</li>
+<li><strong>Cost:</strong> ~30 lines + test.</li>
+</ul>
+
+<h3>Step 5 — Auto-increment heuristic: restore suffix-denylist fallback</h3>
+<ul>
+<li>File: <code>sea-orm-macros/src/derives/entity_model.rs:15-22, 466-473</code></li>
+<li>Combine allowlist + denylist: if the type name is in the integer allowlist OR doesn't end in <code>"String"</code>/<code>"Uuid"</code> AND isn't a known wrapper-shaped name, default to autoincrement.</li>
+<li>This restores type-alias behavior for the common <code>type UserId = i32</code> pattern.</li>
+<li>Alternative: emit a <code>compile_error!</code> with a hint pointing at the explicit <code>auto_increment</code> attribute.</li>
+<li><strong>Cost:</strong> ~15 lines + test.</li>
+</ul>
+
+<h3>Step 6 — Role newtypes for self-ref junctions</h3>
+<ul>
+<li>File: <code>sea-orm-codegen/src/entity/writer.rs::build_pk_newtype_index</code> and <code>Column::get_rs_type</code></li>
+<li>Detect: same parent appears in &gt;1 BelongsTo relation for the same table.</li>
+<li>For those columns, generate a per-column role wrapper holding the parent's PK type (nested newtype, see §7).</li>
+<li>Update <code>tests/common/blogger/user_follower.rs</code> to demonstrate the new behavior.</li>
+<li>Add a trybuild compile-fail fixture proving the swap is now rejected.</li>
+<li><strong>Cost:</strong> ~60 lines + test fixtures. Highest-leverage real-bug-prevention work.</li>
+</ul>
+
+<h3>Step 7 — Wrapper ergonomics: <code>Copy</code> + optional <code>Display</code></h3>
+<ul>
+<li>File: <code>sea-orm-codegen/src/entity/writer.rs::gen_pk_newtype_decls</code></li>
+<li>When the inner type is <code>Copy</code> (integers, UUID), emit <code>Copy</code> in the wrapper's derive list.</li>
+<li>Optionally emit a manual <code>impl Display</code> that delegates to inner when the inner is a known display-able type.</li>
+<li><strong>Cost:</strong> ~20 lines.</li>
+</ul>
+
+<h3>Step 8 — Document orphan-file behavior</h3>
+<ul>
+<li>Add a note to the CLI <code>--with-pk-newtypes</code> help string and to the generated <code>mod.rs</code> docstring: "regen does not delete entity files for tables no longer present in the schema. Use <code>rm</code> to clean up."</li>
+<li>Optional: detect orphans and print a warning at the end of <code>generate entity</code>.</li>
+<li><strong>Cost:</strong> ~10 lines. Pure documentation.</li>
+</ul>
+
+<h3>Step 9 (deferred) — Consider <code>Id&lt;E&gt;</code> for v2</h3>
+<ul>
+<li>Not a near-term fix — a future redesign.</li>
+<li>Prototype <code>sea_orm::Id&lt;E&gt;</code> in a side branch.</li>
+<li>Generate per-table aliases (<code>pub type CakeId = Id&lt;Entity&gt;;</code>) instead of standalone structs.</li>
+<li>Layer role newtypes on top for self-ref junctions.</li>
+<li>This is "version 2 of the feature" rather than a fix to the current implementation.</li>
+</ul>
+
+<h3>Commit grouping recommendation</h3>
+
+<table>
+<thead><tr><th>Commit</th><th>Steps</th><th>Sketch of message</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>Step 1</td><td>Restore <code>find_by_id</code> permissive bound; add <code>find_by_id_strict</code></td></tr>
+<tr><td>2</td><td>Step 2</td><td>codegen: propagate serde derives to PK newtype wrappers</td></tr>
+<tr><td>3</td><td>Steps 3 + 4</td><td>codegen: fix wrapper naming collisions and multi-FK back-ref handling</td></tr>
+<tr><td>4</td><td>Step 5</td><td>macro: restore auto_increment suffix fallback for type aliases</td></tr>
+<tr><td>5</td><td>Step 6</td><td>codegen: role newtypes for self-ref junction PKs</td></tr>
+<tr><td>6</td><td>Steps 7 + 8</td><td>codegen: emit Copy on integer wrappers; document orphan-file behavior</td></tr>
+</tbody>
+</table>
+
+<p>Six commits, no breaking changes after step 1 lands, can be reviewed in order, each independently shippable.</p>
+
+<h2 id="bottom">12. Bottom line</h2>
+
+<div class="verdict-box warn">
+<p><strong>Don't merge the current branch as-is. Worth shipping after the fixes above.</strong></p>
+
+<p>The feature does what was advertised — cross-entity ID confusion is caught at compile time, UUID PKs work end-to-end, the trybuild harness pins the safety contract. The migration-type leakage concern doesn't apply. The original discussion #1310 asked for less than what we delivered (the OP proposed type aliases; we shipped real newtypes).</p>
+
+<p>But six concrete bugs are now reproducible via adversarial tests: multi-FK overwrite, wrapper naming collisions for <code>_id</code>-tables and bare <code>id</code> columns, type-alias autoincrement regression, stale entity files on regen, broken <code>--with-pk-newtypes --with-serde</code> combination, and the <code>find_by_id</code> universal tightening that hits every caller. Plus the self-ref junction safety gap that the per-column role-newtype design in §7 cleanly closes.</p>
+
+<p>The fix plan above is ~6 commits, each small and self-contained. None require a breaking change after step 1 lands. The role-newtype work in step 6 is the highest-leverage improvement to actual safety.</p>
+
+<p>The bigger design question — <strong>should we have built <code>Id&lt;E&gt;</code> instead?</strong> — is honest. For a v2 redesign, yes (with the hybrid approach in §8). For now, the per-table struct approach is workable as long as the six bugs get fixed.</p>
+</div>
+
+<p class="meta">Commits reviewed: <code>ec48d8b7</code>, <code>ffe2ca46</code>, <code>26f89772</code>, <code>053f164f</code>, <code>f0b4b566</code> — all local, none pushed. Adversarial tests are in place across <code>sea-orm-codegen/src/entity/{transformer,writer}.rs</code>, <code>sea-orm-macros/tests/pk_newtype_review_tests.rs</code>, <code>tests/{find_by_id_breaking_change,pk_newtype_self_ref_review,value_type_tests}.rs</code> — these are intentionally left red where they document a confirmed bug.</p>
+
+</body>
+</html>
